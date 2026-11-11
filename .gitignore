@@ -1,5 +1,6 @@
 # Binaries and build output
 bin/
+app
 *.exe
 *.test
 *.out
