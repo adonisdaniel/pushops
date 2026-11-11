@@ -30,6 +30,11 @@
 
   <button class="btn btn--block" id="start">Activar la cámara y el modelo</button>
 
+  <div class="flex" style="gap:8px">
+    <button class="btn btn--ghost grow" id="toggle-camera">Cambiar de cámara</button>
+    <button class="btn btn--ghost grow" id="toggle-masks">Alternar máscaras</button>
+  </div>
+
   <div class="spike__grid">
     <div class="spike__cell"><div class="spike__k">Píxeles</div><div class="spike__v" id="pixels">—</div></div>
     <div class="spike__cell"><div class="spike__k">Landmarks</div><div class="spike__v" id="landmarks">—</div></div>
@@ -40,8 +45,6 @@
   </div>
 
   <div class="spike__log" id="log">Iniciando…</div>
-
-  <button class="btn btn--ghost btn--block" id="toggle-masks">Alternar máscaras</button>
 </div>
 
 <script type="module" src="/js/spike.js"></script>

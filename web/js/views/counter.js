@@ -2,10 +2,11 @@
 
 import { api } from '../api.js';
 import { getState, setSettings, queueWorkout } from '../store.js';
-import { haptic, hapticNotify, hapticSelect, requestFullscreen, lockOrientation, unlockOrientation } from '../tg.js';
+import { haptic, hapticNotify, hapticSelect, requestFullscreen, lockOrientation, unlockOrientation, isTelegram } from '../tg.js';
 import { h, toast, fmtDuration, fmtNumber, openModal, localDate } from '../ui.js';
-import { CameraSession } from '../pose/camera.js';
+import { CameraSession, FACING } from '../pose/camera.js';
 import { Overlay } from '../pose/overlay.js';
+import { AudioFeedback } from '../pose/audio.js';
 import { PoseEngine } from '../pose/engine.js';
 import { calibrate, isCalibrationValid } from '../pose/calibrate.js';
 import { computeSignals, createFilters, DEFAULT_THRESHOLDS } from '../pose/metrics.js';
@@ -14,9 +15,9 @@ import { RepCounter } from '../pose/repCounter.js';
 const MODE_INFO = {
   suelo: {
     title: 'Teléfono bajo el cuerpo',
-    text: 'Coloca el teléfono en el suelo, justo debajo del pecho, con la cámara mirando hacia arriba. El círculo se llenará a medida que te acerques.',
+    text: 'Coloca el teléfono en el suelo, justo debajo del pecho. El círculo se llenará a medida que te acerques.',
     steps: [
-      ['Tumba el teléfono en el suelo', 'con la cámara hacia arriba, bajo el pecho'],
+      ['Tumba el teléfono en el suelo', 'bajo el pecho, con la pantalla hacia arriba'],
       ['Colócate en posición de flexión', 'la cara y el pecho quedan sobre el teléfono'],
       ['Mantén los brazos estirados', 'para que el contador capture la referencia'],
     ],
@@ -32,9 +33,27 @@ const MODE_INFO = {
   },
 };
 
+/** How many times the calibration is retried while the user gets in position. */
+const MAX_CALIBRATION_ATTEMPTS = 20;
+
+/** Human readable labels for the camera picker. */
+const CAMERA_INFO = {
+  [FACING.FRONT]: {
+    label: 'Frontal',
+    hint: 'Con el teléfono pantalla arriba, es la cámara que mira hacia tu cuerpo.',
+  },
+  [FACING.BACK]: {
+    label: 'Trasera',
+    hint: 'Con el teléfono pantalla abajo, es la cámara que mira hacia tu cuerpo.',
+  },
+};
+
 export function counterView() {
   const state = getState();
-  const mode = state.settings.mode ?? 'suelo';
+  // The mode is read from the settings on every use: it can change while the
+  // view is alive, so it must not be captured once and forgotten.
+  const modeOf = () => state.settings.mode ?? 'suelo';
+  let mode = modeOf();
 
   const stage = h('div.counter__stage');
   const video = h('video.counter__video', { playsinline: '', muted: '', autoplay: '' });
@@ -49,32 +68,63 @@ export function counterView() {
   let camera = null;
   let engine = null;
   let overlay = null;
+  let audio = new AudioFeedback();
   let rafId = 0;
   let counter = null;
   let filters = createFilters();
   let calib = state.settings.calibration;
   let running = false;
+  let rendering = false;
   let startedAt = 0;
   let lastVideoTime = -1;
   let reps = [];
   let frameTimes = [];
   let lastFrameAt = 0;
+  let switching = false;
+  let calibrating = false;
+
+  /** The camera to open for the current placement. */
+  function currentFacing() {
+    return state.settings.camera?.[mode] ?? (mode === 'suelo' ? FACING.FRONT : FACING.BACK);
+  }
+
+  function setFacing(facing) {
+    const cameraSettings = { ...(state.settings.camera ?? {}), [mode]: facing };
+    setSettings({ camera: cameraSettings });
+  }
 
   /* ------------------------------- rendering ------------------------------ */
 
   function renderGuide() {
     const info = MODE_INFO[mode];
+    const facing = currentFacing();
     root.classList.add('counter--guide');
     showChrome(true);
     root.replaceChildren(
       h('div.guide',
-        h('div.guide__art', guideArt(mode)),
+        h('div.guide__art', guideArt(mode, facing)),
         h('h2.guide__title', info.title),
         h('p.guide__text', info.text),
         h('div.guide__steps', info.steps.map(([t, d], i) => h('div.guide__step',
           h('span.guide__num', String(i + 1)),
           h('div', h('b', t), ' — ', d),
         ))),
+
+        h('div.field', { style: { width: '100%', maxWidth: '330px', margin: '4px auto 0' } },
+          h('label.field__label', 'Cámara'),
+          h('div.segmented',
+            [FACING.FRONT, FACING.BACK].map((value) => h('button.segmented__item', {
+              class: value === facing ? 'is-active' : '',
+              onclick: () => {
+                setFacing(value);
+                hapticSelect();
+                renderGuide();
+              },
+            }, CAMERA_INFO[value].label)),
+          ),
+          h('div.field__hint', CAMERA_INFO[facing].hint),
+        ),
+
         h('div', { style: { display: 'flex', gap: '8px', width: '100%', maxWidth: '330px' } },
           h('button.btn.btn--ghost.grow', {
             onclick: () => { void switchMode(mode === 'suelo' ? 'perfil' : 'suelo'); },
@@ -112,10 +162,58 @@ export function counterView() {
   }
 
   function renderHud() {
+    const muted = getState().settings.muted;
     hud.replaceChildren(
       h('div.counter__pill', h('span.counter__dot.counter__dot--live'), mode === 'suelo' ? 'Modo suelo' : 'Modo lateral'),
-      h('div.counter__pill', { id: 'fps-pill' }, '— fps'),
+      h('div.counter__hud-right',
+        h('div.counter__pill', { id: 'fps-pill' }, '— fps'),
+        h('button.counter__icon', {
+          onclick: () => void switchCamera(),
+          title: 'Cambiar de cámara',
+          'aria-label': 'Cambiar de cámara',
+        }, '🔄'),
+        h('button.counter__icon', {
+          onclick: () => toggleMute(),
+          title: muted ? 'Activar el sonido' : 'Silenciar',
+          'aria-label': muted ? 'Activar el sonido' : 'Silenciar',
+        }, muted ? '🔇' : '🔊'),
+      ),
     );
+  }
+
+  function toggleMute() {
+    const muted = !getState().settings.muted;
+    setSettings({ muted });
+    audio.setMuted(muted);
+    renderHud();
+    if (!muted) audio.play('start');
+  }
+
+  /**
+   * Opens the other camera and recalibrates: the selfie and the rear camera
+   * have a different field of view, so the previous reference is meaningless.
+   */
+  async function switchCamera() {
+    if (switching || !camera) return;
+    switching = true;
+    const next = camera.isFrontFacing() ? FACING.BACK : FACING.FRONT;
+    setFacing(next);
+    hapticSelect();
+    try {
+      toast('Abriendo la otra cámara…');
+      await camera.switchTo(video, next);
+      lastVideoTime = -1;
+      filters = createFilters();
+      await runCalibration('Cámara cambiada: recalibrando');
+      counter?.reset();
+      renderHud();
+      toast(`Ahora usas la cámara ${CAMERA_INFO[next].label.toLowerCase()}`, 'ok');
+    } catch (err) {
+      console.error(err);
+      toast(err.message ?? 'No se ha podido cambiar de cámara', 'error');
+    } finally {
+      switching = false;
+    }
   }
 
   function renderBar() {
@@ -133,31 +231,49 @@ export function counterView() {
   async function switchMode(next) {
     hapticSelect();
     setSettings({ mode: next, calibration: null });
+    mode = next;
     calib = null;
+    // The engine has to be rebuilt: the segmentation mask is only enabled in
+    // the "suelo" mode and the camera choice depends on the placement.
+    if (engine) {
+      engine.close();
+      engine = null;
+    }
     renderGuide();
   }
 
   async function startFlow() {
     try {
-      requestFullscreen();
+      // The click that starts the camera also unlocks the audio context.
+      audio.unlock();
+      audio.setMuted(getState().settings.muted);
+
+      // Fullscreen only exists inside Telegram.
+      if (isTelegram) requestFullscreen();
       lockOrientation();
       renderLive();
 
       camera = new CameraSession();
-      await camera.start(video, { facingMode: 'environment' });
+      await camera.start(video, { facingMode: currentFacing() });
 
       engine = new PoseEngine();
       // The depth signal relies on the segmentation mask in "suelo" mode.
       engine.setMasksEnabled(mode === 'suelo');
       await engine.init({ onProgress: (msg) => toast(msg) });
 
-      overlay = new Overlay(canvas, ringHost);
+      overlay = new Overlay(canvas, ringHost, video);
       filters = createFilters();
+
+      // The preview has to be on screen before the calibration: this is
+      // exactly when the user needs to see where the camera is pointing.
+      rendering = true;
+      lastFrameAt = performance.now();
+      loop();
 
       if (!isCalibrationValid(calib) || calib.mode !== mode) {
         await runCalibration();
       }
-      await beginCounting();
+      beginCounting();
     } catch (err) {
       console.error(err);
       stopEverything();
@@ -168,7 +284,7 @@ export function counterView() {
   function renderError(message) {
     root.replaceChildren(
       h('div.guide',
-        h('div.guide__art', guideArt(mode)),
+        h('div.guide__art', guideArt(mode, currentFacing())),
         h('h2.guide__title', 'No podemos usar la cámara'),
         h('p.guide__text', message),
         h('p.guide__text', 'Alternativas: abre la app en tu navegador (Chrome o Safari) o usa el contador manual desde el perfil.'),
@@ -177,75 +293,63 @@ export function counterView() {
     );
   }
 
-  async function runCalibration() {
+  async function runCalibration(message = 'Posición de partida: brazos estirados') {
     const overlayNode = h('div.counter__calib',
       h('div',
         h('div.counter__calibNum', '3'),
-        h('div.counter__calibText', 'Posición de partida: brazos estirados'),
+        h('div.counter__calibText', message),
       ),
     );
     stage.appendChild(overlayNode);
     const numNode = overlayNode.querySelector('.counter__calibNum');
+    const textNode = overlayNode.querySelector('.counter__calibText');
+    calibrating = true;
 
     try {
-      const result = await calibrate({
-        detect: () => {
-          const ts = performance.now();
-          if (video.readyState < 2 || video.currentTime === lastVideoTime) return null;
-          lastVideoTime = video.currentTime;
-          const frame = engine.detect(video, ts);
-          if (frame) frame.video = video;
-          return frame;
-        },
-        durationMs: 3000,
-        mode,
-        onTick: (secondsLeft, stats) => {
-          numNode.textContent = String(Math.max(1, secondsLeft));
-          if (stats?.coverage) {
-            numNode.textContent = String(Math.max(1, secondsLeft));
-          }
-        },
-      });
-      calib = result;
-      setSettings({ calibration: result });
-    } catch (err) {
+      for (let attempt = 1; attempt <= MAX_CALIBRATION_ATTEMPTS; attempt++) {
+        try {
+          const result = await calibrate({
+            detect: () => {
+              const ts = performance.now();
+              if (video.readyState < 2 || video.currentTime === lastVideoTime) return null;
+              lastVideoTime = video.currentTime;
+              const frame = engine.detect(video, ts);
+              if (frame) frame.video = video;
+              return frame;
+            },
+            durationMs: 3000,
+            mode,
+            onTick: (secondsLeft) => {
+              numNode.textContent = String(Math.max(1, secondsLeft));
+            },
+          });
+          calib = result;
+          setSettings({ calibration: result });
+          return;
+        } catch (err) {
+          // The body is not in frame yet: keep waiting instead of giving up.
+          if (err?.code !== 'NO_POSE_DETECTED') throw err;
+          textNode.textContent = 'No te veo todavía: colócate en posición';
+          numNode.textContent = '...';
+          await new Promise((r) => setTimeout(r, 800));
+        }
+      }
+      throw new Error('No he podido detectar tu cuerpo. Comprueba que la cámara apunta hacia ti y que hay luz suficiente.');
+    } finally {
       overlayNode.remove();
-      throw err;
+      calibrating = false;
     }
-    overlayNode.remove();
   }
 
   async function recalibrate() {
     if (!engine) return;
-    const overlayNode = h('div.counter__calib',
-      h('div',
-        h('div.counter__calibNum', '3'),
-        h('div.counter__calibText', 'Recalibrando: brazos estirados'),
-      ),
-    );
-    stage.appendChild(overlayNode);
     try {
-      const result = await calibrate({
-        detect: () => {
-          const ts = performance.now();
-          if (video.readyState < 2 || video.currentTime === lastVideoTime) return null;
-          lastVideoTime = video.currentTime;
-          const frame = engine.detect(video, ts);
-          if (frame) frame.video = video;
-          return frame;
-        },
-        durationMs: 3000,
-        mode,
-      });
-      calib = result;
-      setSettings({ calibration: result });
+      await runCalibration('Recalibrando: brazos estirados');
       filters = createFilters();
       counter?.reset();
       toast('Calibración actualizada');
     } catch (err) {
       toast(err.message ?? 'No se ha podido calibrar', 'error');
-    } finally {
-      overlayNode.remove();
     }
   }
 
@@ -260,40 +364,48 @@ export function counterView() {
         reps.push(event);
         if (event.ok) {
           haptic('medium');
+          audio.play('valid');
           updateRepsBox();
         } else {
           haptic('light');
+          audio.play('invalid');
           toast(event.reasons?.[0] ?? 'repetición no válida');
         }
       },
       onStateChange: () => updateRepsBox(),
     });
     lastFrameAt = performance.now();
-    loop();
+    audio.play('start');
   }
 
   function loop() {
-    if (!running) return;
+    if (!rendering) return;
     rafId = requestAnimationFrame(loop);
 
     const ts = performance.now();
     if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
       lastVideoTime = video.currentTime;
       const frame = engine.detect(video, ts);
+      let signal = null;
+
       if (frame) {
         frame.video = video;
-        const signal = computeSignals(frame, calib, {
+        signal = computeSignals(frame, calib, {
           thresholds: { ...DEFAULT_THRESHOLDS, ...(getState().settings.thresholds ?? {}) },
           ...filters,
         });
-        overlay?.draw(frame, signal);
-        counter?.push(signal);
+        // No repetition is counted while the reference is being measured.
+        if (!calibrating) counter?.push(signal);
 
         const dt = ts - lastFrameAt;
         lastFrameAt = ts;
         frameTimes.push(dt);
         if (frameTimes.length > 30) frameTimes.shift();
       }
+
+      // The preview is painted even without a pose, so the user can frame
+      // themselves while the detector looks for them.
+      overlay?.draw(frame, signal, { mirror: camera?.isFrontFacing() });
     }
     updateFps();
   }
@@ -331,12 +443,14 @@ export function counterView() {
       renderGuide();
       return;
     }
+    audio.play('complete');
     await persist(elapsed, counts);
     showResult(elapsed, counts);
   }
 
   function stopEverything() {
     running = false;
+    rendering = false;
     cancelAnimationFrame(rafId);
     camera?.stop();
     camera = null;
@@ -442,8 +556,12 @@ export function counterView() {
   };
 }
 
-/** Simple line-art illustration of the phone placement for each mode. */
-function guideArt(mode) {
+/**
+ * Line art of the phone placement. The camera dot moves depending on which
+ * camera is selected: with the phone screen up the selfie lens points at the
+ * body, with the screen down it is the rear lens that does.
+ */
+function guideArt(mode, facing = FACING.FRONT) {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 120 120');
@@ -460,23 +578,46 @@ function guideArt(mode) {
     svg.appendChild(node);
     return node;
   };
+  const front = facing === FACING.FRONT;
 
   if (mode === 'suelo') {
-    // Person seen from below, phone on the floor.
-    add('rect', { x: '44', y: '96', width: '32', height: '9', rx: '2.5' });
+    // Floor.
+    add('path', { d: 'M10 108 H110', opacity: '.2' });
+
+    // Phone lying flat, camera dot on the face that points up.
+    add('rect', { x: '42', y: '96', width: '36', height: '9', rx: '2.5' });
+    if (front) {
+      add('circle', { cx: '71', cy: '94', r: '2.8', fill: 'currentColor', stroke: 'none' });
+      add('path', { d: 'M46 97.5 H58', opacity: '.35' });
+    } else {
+      add('circle', { cx: '71', cy: '107', r: '2.8', fill: 'currentColor', stroke: 'none' });
+      add('path', { d: 'M46 103.5 H58', opacity: '.35' });
+    }
+
+    // Field of view towards the body.
+    add('path', { d: 'M60 92 L60 62', opacity: '.35', 'stroke-dasharray': '3 4' });
+
+    // Person seen from below.
     add('circle', { cx: '60', cy: '24', r: '11' });
     add('path', { d: 'M60 35 L60 56' });
     add('path', { d: 'M60 40 L38 52 M60 40 L82 52' });
     add('path', { d: 'M38 52 L44 92 M82 52 L76 92' });
-    add('circle', { cx: '60', cy: '100', r: '13', opacity: '.45' });
   } else {
     // Person in profile with the phone on the floor at the side.
     add('circle', { cx: '40', cy: '26', r: '10' });
     add('path', { d: 'M44 34 L70 52 L68 78' });
     add('path', { d: 'M44 36 L58 58 M46 40 L34 60' });
     add('path', { d: 'M68 78 L82 96 M46 40 L38 96' });
-    add('rect', { x: '88', y: '92', width: '22', height: '8', rx: '2.5' });
-    add('path', { d: 'M92 88 L92 76 M100 88 L100 76', opacity: '.5' });
+
+    // Phone standing on its side, lens facing the body.
+    add('rect', { x: '86', y: '88', width: '24', height: '9', rx: '2.5' });
+    if (front) {
+      add('circle', { cx: '91', cy: '92.5', r: '2.6', fill: 'currentColor', stroke: 'none' });
+    } else {
+      add('circle', { cx: '105', cy: '92.5', r: '2.6', fill: 'currentColor', stroke: 'none' });
+    }
+    add('path', { d: 'M84 84 L84 74', opacity: '.4' });
+    add('path', { d: 'M96 84 L96 74', opacity: '.4' });
   }
   return svg;
 }

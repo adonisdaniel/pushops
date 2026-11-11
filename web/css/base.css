@@ -43,6 +43,10 @@ button {
 
 img, svg, video, canvas { display: block; max-width: 100%; }
 
+/* The `hidden` attribute must win over the display rules of the components:
+   the top bar and the tab bar are hidden while the camera is live. */
+[hidden] { display: none !important; }
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

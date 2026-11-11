@@ -22,12 +22,21 @@ function loadSettings() {
     variant: 'standard',
     calibration: null,        // last calibration payload
     thresholds: null,         // user-tuned detector thresholds
+    // Which camera to use per placement. On the floor the phone lies screen up,
+    // so the selfie camera is the one pointing at the body.
+    camera: { suelo: 'user', perfil: 'environment' },
+    muted: false,             // silences the repetition beep
     manualCount: false,
   };
   try {
     const raw = localStorage.getItem('pushops.settings');
     if (!raw) return defaults;
-    return { ...defaults, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...defaults,
+      ...parsed,
+      camera: { ...defaults.camera, ...(parsed.camera ?? {}) },
+    };
   } catch {
     return defaults;
   }

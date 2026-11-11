@@ -5,6 +5,7 @@ import { getState, setSettings, setState } from '../store.js';
 import { h, fmtNumber, avatar, loading, toast, promptModal, confirmModal, openModal } from '../ui.js';
 import { hapticSelect } from '../tg.js';
 import { DEFAULT_THRESHOLDS } from '../pose/metrics.js';
+import { FACING } from '../pose/camera.js';
 
 export function profileView() {
   const el = h('div');
@@ -68,6 +69,24 @@ export function profileView() {
             h('label.field__label', 'Posición de la cámara'),
             modePicker(),
           ),
+          h('div.field',
+            h('label.field__label', 'Lente en el modo suelo'),
+            cameraPicker(),
+          ),
+          h('div.field',
+            h('label.field__label', 'Sonido'),
+            h('div.segmented',
+              h('button.segmented__item', {
+                class: !getState().settings.muted ? 'is-active' : '',
+                onclick: (e) => setMuted(false, e.currentTarget),
+              }, 'Activado'),
+              h('button.segmented__item', {
+                class: getState().settings.muted ? 'is-active' : '',
+                onclick: (e) => setMuted(true, e.currentTarget),
+              }, 'Silenciado'),
+            ),
+            h('div.field__hint', 'En el modo suelo el móvil está en el suelo: el beep es lo único que te confirma cada flexión.'),
+          ),
           h('button.btn.btn--ghost.btn--block', { onclick: openTuner }, 'Ajustar sensibilidad del contador'),
         ),
       ),
@@ -120,6 +139,30 @@ export function profileView() {
       }, label));
     }
     return wrap;
+  }
+
+  function cameraPicker() {
+    const mode = getState().settings.mode ?? 'suelo';
+    const current = getState().settings.camera?.[mode] ?? (mode === 'suelo' ? FACING.FRONT : FACING.BACK);
+    const wrap = h('div.segmented');
+    for (const [key, label] of [[FACING.FRONT, 'Frontal'], [FACING.BACK, 'Trasera']]) {
+      wrap.appendChild(h('button.segmented__item', {
+        class: key === current ? 'is-active' : '',
+        onclick: (e) => {
+          [...e.currentTarget.parentElement.children].forEach((c) => c.classList.remove('is-active'));
+          e.currentTarget.classList.add('is-active');
+          setSettings({ camera: { ...(getState().settings.camera ?? {}), [mode]: key } });
+          hapticSelect();
+        },
+      }, label));
+    }
+    return wrap;
+  }
+
+  function setMuted(muted, button) {
+    [...button.parentElement.children].forEach((c) => c.classList.remove('is-active'));
+    button.classList.add('is-active');
+    setSettings({ muted });
   }
 
   function openTuner() {

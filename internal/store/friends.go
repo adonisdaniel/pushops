@@ -128,9 +128,13 @@ func (s *Store) RemoveFriend(ctx context.Context, userID, friendID int64) error 
 
 // ListFriends returns accepted friends and pending requests for a user.
 func (s *Store) ListFriends(ctx context.Context, userID int64) (friends []domain.Friendship, incoming []domain.Friendship, err error) {
+	// Empty slices instead of nil so the API answers [] and never null.
+	friends = []domain.Friendship{}
+	incoming = []domain.Friendship{}
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT f.id, f.requester_id, f.addressee_id, f.status, f.created_at, f.responded_at,
-		        u.nickname, u.tg_username, u.photo_url
+		        u.id, u.nickname, u.tg_username, u.photo_url
 		 FROM friendships f
 		 JOIN users u ON u.id = CASE WHEN f.requester_id = ? THEN f.addressee_id ELSE f.requester_id END
 		 WHERE (f.requester_id = ? OR f.addressee_id = ?)
@@ -143,7 +147,7 @@ func (s *Store) ListFriends(ctx context.Context, userID int64) (friends []domain
 	for rows.Next() {
 		var f domain.Friendship
 		if err := rows.Scan(&f.ID, &f.RequesterID, &f.AddresseeID, &f.Status, &f.CreatedAt, &f.RespondedAt,
-			&f.Nickname, &f.TgUsername, &f.PhotoURL); err != nil {
+			&f.UserID, &f.Nickname, &f.TgUsername, &f.PhotoURL); err != nil {
 			return nil, nil, err
 		}
 		switch f.Status {

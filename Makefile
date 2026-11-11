@@ -25,7 +25,7 @@ build:
 
 test:
 	$(GO) test ./...
-	node --test tests/detector.test.mjs
+	node --test tests/*.test.mjs
 
 fmt:
 	gofmt -w .

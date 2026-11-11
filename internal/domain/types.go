@@ -71,6 +71,8 @@ type Friendship struct {
 	Status      string `json:"status"`
 	CreatedAt   int64  `json:"createdAt"`
 	RespondedAt int64  `json:"respondedAt,omitempty"`
+	// UserID is the other participant, from the point of view of the viewer.
+	UserID int64 `json:"userId,omitempty"`
 	// Denormalised for list rendering.
 	Nickname   string `json:"nickname,omitempty"`
 	TgUsername string `json:"tgUsername,omitempty"`

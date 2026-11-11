@@ -25,16 +25,18 @@ export function friendsView() {
     }
   }
 
-  function render({ friends = [], incoming = [] }) {
+  function render({ friends = [], incoming = [] } = {}) {
+    const friendList = friends ?? [];
+    const incomingList = incoming ?? [];
     content.replaceChildren(
       h('div.view__section',
         h('button.btn.btn--block', { onclick: addFriend }, 'Añadir amigo'),
       ),
 
-      incoming.length
+      incomingList.length
         ? h('div.view__section',
           h('div.section-head', h('h2', 'Solicitudes pendientes')),
-          h('div.list', incoming.map((f) => h('div.row',
+          h('div.list', incomingList.map((f) => h('div.row',
             avatar(f),
             h('div.row__body',
               h('div.row__title', f.nickname),
@@ -64,48 +66,46 @@ export function friendsView() {
         : null,
 
       h('div.view__section',
-        h('div.section-head', h('h2', `Tus amigos (${friends.length})`)),
-        friends.length
-          ? h('div.list', friends.map(friendRow))
+        h('div.section-head', h('h2', `Tus amigos (${friendList.length})`)),
+        friendList.length
+          ? h('div.list', friendList.map(friendRow))
           : h('div.card.card--flat', emptyState('👥', 'Aún no tienes amigos', 'Busca a alguien por su nickname y compite con él.')),
       ),
 
-      friends.length > 1 ? compareSection(friends) : null,
+      friendList.length > 1 ? compareSection(friendList) : null,
     );
   }
 
   function friendRow(f) {
-    return h('div.row.row--tap', {
-      onclick: () => { location.hash = `#/friends/compare?ids=${f.addresseeId === undefined ? f.requesterId : f.addresseeId}`; },
-    },
-    avatar(f),
-    h('div.row__body',
-      h('div.row__title', f.nickname),
-      h('div.row__sub', f.tgUsername ? `@${f.tgUsername}` : 'Amigo'),
-    ),
-    h('button.btn.btn--sm.btn--ghost', {
-      onclick: async (e) => {
-        e.stopPropagation();
-        const ok = await confirmModal({
-          title: 'Eliminar amigo',
-          message: `¿Seguro que quieres quitar a ${f.nickname} de tu lista?`,
-          confirmText: 'Eliminar',
-          danger: true,
-        });
-        if (!ok) return;
-        try {
-          await api.del(`/api/friends/${f.id}`);
-          toast('Amigo eliminado');
-          load();
-        } catch (err) { toast(err.message, 'error'); }
-      },
-    }, 'Quitar'),
+    return h('div.row',
+      avatar(f),
+      h('div.row__body',
+        h('div.row__title', f.nickname),
+        h('div.row__sub', f.tgUsername ? `@${f.tgUsername}` : 'Amigo'),
+      ),
+      h('button.btn.btn--sm.btn--ghost', {
+        onclick: async (e) => {
+          e.stopPropagation();
+          const ok = await confirmModal({
+            title: 'Eliminar amigo',
+            message: `¿Seguro que quieres quitar a ${f.nickname} de tu lista?`,
+            confirmText: 'Eliminar',
+            danger: true,
+          });
+          if (!ok) return;
+          try {
+            await api.del(`/api/friends/${f.id}`);
+            toast('Amigo eliminado');
+            load();
+          } catch (err) { toast(err.message, 'error'); }
+        },
+      }, 'Quitar'),
     );
   }
 
   function compareSection(friends) {
-    const ids = friends.map((f) => (f.addresseeId === undefined ? f.requesterId : f.addresseeId)).join(',');
-    const wrap = h('div.view__section',
+    const ids = friends.map((f) => f.userId).join(',');
+    const wrap = h('div.view__section', { id: 'comparativa' },
       h('div.section-head', h('h2', 'Comparativa')),
       h('div.card', loading('Comparando…')),
     );

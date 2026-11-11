@@ -4,7 +4,7 @@
 //   3. How many frames per second do we get?
 
 import { PoseEngine } from './pose/engine.js';
-import { CameraSession } from './pose/camera.js';
+import { CameraSession, FACING } from './pose/camera.js';
 import { maskCoverage } from './pose/metrics.js';
 import { elbowAngle } from './pose/landmarks.js';
 
@@ -74,15 +74,16 @@ let lastVideoTime = -1;
 let frames = 0;
 let fpsSince = performance.now();
 let masks = false;
+let facing = FACING.FRONT;
 
 async function run() {
   startBtn.disabled = true;
   try {
     camera = new CameraSession();
-    await camera.start(video, { facingMode: 'environment' });
+    await camera.start(video, { facingMode: facing });
     const track = camera.stream.getVideoTracks()[0];
     const settings = track?.getSettings?.() ?? {};
-    log(`cámara abierta: ${settings.width}x${settings.height} @${settings.frameRate}`);
+    log(`cámara abierta (${facing === FACING.FRONT ? 'frontal' : 'trasera'}): ${settings.width}x${settings.height} @${settings.frameRate}`);
     log(`stream activo: ${camera.stream.active}, pistas: ${camera.stream.getTracks().length}`);
 
     engine = new PoseEngine();
@@ -151,6 +152,25 @@ function loop() {
 }
 
 startBtn.addEventListener('click', run);
+
+// Switch between the selfie and the rear camera without reloading.
+document.getElementById('toggle-camera').addEventListener('click', async () => {
+  facing = facing === FACING.FRONT ? FACING.BACK : FACING.FRONT;
+  const label = facing === FACING.FRONT ? 'frontal' : 'trasera';
+  log(`cambiando a la cámara ${label}…`);
+  try {
+    if (camera) {
+      await camera.switchTo(video, facing);
+    } else {
+      camera = new CameraSession();
+      await camera.start(video, { facingMode: facing });
+    }
+    lastVideoTime = -1;
+    log(`cámara ${label} lista`);
+  } catch (err) {
+    log(`ERROR al cambiar de cámara: ${err.message}`);
+  }
+});
 
 document.getElementById('toggle-masks').addEventListener('click', async () => {
   masks = !masks;

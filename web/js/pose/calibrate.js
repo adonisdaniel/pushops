@@ -58,7 +58,10 @@ export async function calibrate({ detect, durationMs = 3000, mode = 'suelo', onT
       if (elapsed >= durationMs) {
         const result = buildCalibration({ lengths, coverages, angles, mode, startedAt: start });
         if (!result) {
-          reject(new Error('No se ha podido detectar el cuerpo. Coloca el teléfono en su sitio e inténtalo de nuevo.'));
+          const err = new Error('No se ha podido detectar el cuerpo. Coloca el teléfono en su sitio e inténtalo de nuevo.');
+          // The caller can retry while the user gets in position.
+          err.code = 'NO_POSE_DETECTED';
+          reject(err);
           return;
         }
         resolve(result);

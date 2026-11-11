@@ -10,6 +10,28 @@ con tus amigos.
 
 ---
 
+## Cómo se cuenta una flexión
+
+El teléfono se coloca en el suelo y la cámara mira hacia tu cuerpo. Qué cámara
+sirve depende de cómo tumbas el móvil:
+
+| Colocación | Lente que mira al techo |
+|---|---|
+| **Pantalla arriba** (lo natural) | **Frontal / selfie** ← la que se usa en modo suelo |
+| Pantalla abajo | Trasera |
+
+El modo suelo funciona con la profundidad: al bajar, el cuerpo se acerca a la
+cámara y el círculo se llena. El modo lateral funciona con el ángulo del codo,
+que es más preciso. Se puede cambiar de cámara en caliente con el botón 🔄, y
+la app recalibra sola porque una lente y otra tienen un campo de visión
+distinto.
+
+**El sonido importa.** En el modo suelo el móvil está en el suelo, no en tu
+mano: no notas la vibración. El beep es lo único que te confirma cada
+flexión. Se silencia desde el contador o desde *Perfil*.
+
+---
+
 ## Puesta en marcha
 
 ### 1. Requisitos
