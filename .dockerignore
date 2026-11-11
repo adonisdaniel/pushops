@@ -1,0 +1,12 @@
+# Build context exclusions for the Docker image.
+.git
+.gitignore
+.data
+bin
+*.log
+.env
+.env.*
+README.md
+railway.toml
+render.yaml
+tests

@@ -1,0 +1,45 @@
+# Render Blueprint for PushOps.
+#
+# Deploy with: Render Dashboard -> New -> Blueprint -> point at this repository.
+# The three secrets (TURSO_AUTH_TOKEN, TELEGRAM_BOT_TOKEN, JWT_SECRET) are
+# never stored in the repository: Render asks for them during the deploy.
+#
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: pushops
+    runtime: go
+    plan: free
+
+    buildCommand: CGO_ENABLED=0 go build -tags netgo -ldflags "-s -w" -o app ./cmd/pushops
+    startCommand: ./app
+    healthCheckPath: /healthz
+
+    envVars:
+      # go.mod requires Go 1.24.6 and Render defaults to an older release.
+      - key: GO_VERSION
+        value: "1.24.6"
+
+      - key: TURSO_DATABASE_URL
+        value: libsql://puhops-adonisdaniel.aws-us-east-1.turso.io
+
+      # Ask for it during the deploy: the token is a secret.
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+
+      # Ask for it during the deploy: never commit a bot token.
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+
+      # Render generates a random value for this one.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Public URL of this service, used in logs and links.
+      - key: PUBLIC_URL
+        sync: false
+
+      # Development-only login endpoint. Leave it off in production.
+      - key: DEV_MODE
+        value: "false"

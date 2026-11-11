@@ -1,0 +1,14 @@
+github.com/ebitengine/purego v0.9.1 h1:a/k2f2HQU3Pi399RPW1MOaZyhKJL9w/xFpKAg4q1s0A=
+github.com/ebitengine/purego v0.9.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
+github.com/go-chi/chi/v5 v5.5.0 h1:xdKQ1dJmVJsmgahrXSKhUx8NyVPzpwdlyrrQFpMPJgg=
+github.com/go-chi/chi/v5 v5.5.0/go.mod h1:d1IG7GtKPSjPyBP365PH8sAGVHk3qfB/IhjFNRH1wWM=
+github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=
+github.com/golang-jwt/jwt/v5 v5.3.1/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
+github.com/tursodatabase/turso-go-platform-libs v0.8.3 h1:7OKVmkIxR/hz3/iPFpn3gDIx1Vg3Fwy0DGMp2oXl0yw=
+github.com/tursodatabase/turso-go-platform-libs v0.8.3/go.mod h1:bo+Lpv5OYOX1gRV9L5DLKMsYxmDs56SkZwnCOLEFcxU=
+golang.org/x/sys v0.38.0 h1:3yZWxaJjBmCWXqhN1qh02AkOnCQ1poK6oF+a7xWL6Gc=
+golang.org/x/sys v0.38.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
+turso.tech/database/tursogo v0.8.3 h1:2JCp2gs4m+G3VuIS1U+Eq50f+UMhbAFlgOpzGlwE7e0=
+turso.tech/database/tursogo v0.8.3/go.mod h1:weO25nrgCnH9Z2nlIcNk7iGeXTt7jPrGEs4MszfSnhA=
+turso.tech/database/tursogo-serverless v0.0.0-20261111154146-b252b855c468 h1:iIVWMg10/07giB5fx7DidxN8m+stqqXKTOq4/cCrzj0=
+turso.tech/database/tursogo-serverless v0.0.0-20261111154146-b252b855c468/go.mod h1:KWrz0BzLKiXUkLmM5HXyr/gWA8ySNZexfW0NV0GGk0A=

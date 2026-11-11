@@ -1,0 +1,87 @@
+/* Theme: design tokens, optionally overridden by Telegram's theme params. */
+
+:root {
+  /* Fallback palette */
+  --bg:            #0d1015;
+  --bg-elevated:   #151a21;
+  --surface:       #151a21;
+  --surface-2:     #1c222b;
+  --fg:            #e9edf2;
+  --fg-muted:      #9aa5b4;
+  --fg-dim:        #66707d;
+  --border:        #262d38;
+  --border-strong: #333c49;
+
+  /* Brand */
+  --accent:        #3ddc84;
+  --accent-soft:   rgba(61, 220, 132, .14);
+  --accent-fg:     #06230f;
+  --info:          #4cc2ff;
+  --warn:          #fbbf24;
+  --danger:        #fb7185;
+
+  --radius-sm: 10px;
+  --radius:    14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,.3);
+  --shadow-2: 0 6px 24px rgba(0,0,0,.35);
+  --shadow-3: 0 18px 48px rgba(0,0,0,.45);
+
+  --tab-h: 62px;
+  --pad: 16px;
+
+  --ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+/* Telegram provides these as CSS variables; map them onto our tokens. */
+body[data-telegram="true"] {
+  --bg:            var(--tg-theme-bg-color, var(--bg));
+  --bg-elevated:   var(--tg-theme-section-bg-color, var(--surface));
+  --surface:       var(--tg-theme-secondary-bg-color, var(--surface));
+  --surface-2:     color-mix(in srgb, var(--surface) 82%, var(--fg) 6%);
+  --fg:            var(--tg-theme-text-color, var(--fg));
+  --fg-muted:      var(--tg-theme-hint-color, var(--fg-muted));
+  --border:        color-mix(in srgb, var(--fg) 12%, transparent);
+  --border-strong: color-mix(in srgb, var(--fg) 22%, transparent);
+  --accent:        var(--tg-theme-button-color, var(--accent));
+  --accent-fg:     var(--tg-theme-button-text-color, var(--accent-fg));
+}
+
+body[data-color-scheme="light"] {
+  --bg:            #f4f6f8;
+  --bg-elevated:   #ffffff;
+  --surface:       #ffffff;
+  --surface-2:     #eef1f5;
+  --fg:            #10151c;
+  --fg-muted:      #5b6673;
+  --fg-dim:        #8b95a2;
+  --border:        #e3e8ee;
+  --border-strong: #cfd6de;
+  --accent:        #12b76a;
+  --accent-soft:   rgba(18, 183, 106, .12);
+  --accent-fg:     #ffffff;
+  --shadow-1: 0 1px 2px rgba(16,21,28,.06);
+  --shadow-2: 0 6px 20px rgba(16,21,28,.08);
+  --shadow-3: 0 18px 44px rgba(16,21,28,.12);
+}
+
+body[data-color-scheme="light"][data-telegram="true"] {
+  --bg:          var(--tg-theme-bg-color, var(--bg));
+  --surface:     var(--tg-theme-secondary-bg-color, var(--surface));
+  --fg:          var(--tg-theme-text-color, var(--fg));
+  --fg-muted:    var(--tg-theme-hint-color, var(--fg-muted));
+  --border:      color-mix(in srgb, var(--fg) 12%, transparent);
+  --border-strong: color-mix(in srgb, var(--fg) 20%, transparent);
+  --accent:      var(--tg-theme-button-color, var(--accent));
+}
+
+/* Accent used for the fitness progress ring; independent of the Telegram accent
+   so the ring keeps its meaning in light and dark themes. */
+:root {
+  --ring:      #3ddc84;
+  --ring-mid:  #fbbf24;
+  --ring-low:  #fb7185;
+}
+body[data-color-scheme="light"] { --ring: #12b76a; --ring-mid: #f59e0b; --ring-low: #e11d48; }
