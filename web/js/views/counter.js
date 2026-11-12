@@ -36,6 +36,11 @@ const MODE_INFO = {
 /** How many times the calibration is retried while the user gets in position. */
 const MAX_CALIBRATION_ATTEMPTS = 20;
 
+/** Rounds to three decimals, so the payload stays tidy and comparable. */
+function round3(v) {
+  return Math.round((v ?? 0) * 1000) / 1000;
+}
+
 /** Human readable labels for the camera picker. */
 const CAMERA_INFO = {
   [FACING.FRONT]: {
@@ -82,6 +87,12 @@ export function counterView() {
   let lastFrameAt = 0;
   let switching = false;
   let calibrating = false;
+  // Diagnostics of the current set, shown in the report.
+  let totalFrames = 0;
+  let poseFrames = 0;
+  let confSum = 0;
+  let maxFill = 0;
+  let minElbow = 0;
 
   /** The camera to open for the current placement. */
   function currentFacing() {
@@ -397,10 +408,20 @@ export function counterView() {
         // No repetition is counted while the reference is being measured.
         if (!calibrating) counter?.push(signal);
 
+        totalFrames++;
+        poseFrames++;
+        confSum += signal.confidence ?? 0;
+        if (signal.fill > maxFill) maxFill = signal.fill;
+        if (signal.angleAvailable && (minElbow === 0 || signal.elbow < minElbow)) {
+          minElbow = signal.elbow;
+        }
+
         const dt = ts - lastFrameAt;
         lastFrameAt = ts;
         frameTimes.push(dt);
         if (frameTimes.length > 30) frameTimes.shift();
+      } else {
+        totalFrames++;
       }
 
       // The preview is painted even without a pose, so the user can frame
@@ -444,8 +465,8 @@ export function counterView() {
       return;
     }
     audio.play('complete');
-    await persist(elapsed, counts);
-    showResult(elapsed, counts);
+    const outcome = await persist(elapsed, counts);
+    showResult(elapsed, counts, outcome);
   }
 
   function stopEverything() {
@@ -462,6 +483,11 @@ export function counterView() {
   }
 
   async function persist(elapsed, counts) {
+    const fps = Math.round(frameTimes.length
+      ? 1000 / (frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length)
+      : 0);
+    const avgConf = poseFrames ? confSum / poseFrames : 0;
+
     const payload = {
       clientId: `w_${startedAt}_${counts.valid}_${counts.invalid}`,
       variant: getState().settings.variant ?? 'standard',
@@ -470,34 +496,71 @@ export function counterView() {
       endedAt: Date.now(),
       localDate: localDate(),
       reps: reps.map((r) => ({
-        tMs: r.tMs,
-        durationMs: r.durationMs,
-        fillMax: r.fillMax,
-        elbowMin: r.elbowMin,
-        ok: r.ok,
-        conf: r.conf,
+        // Whole numbers on purpose: the server decodes these as integers.
+        tMs: Math.round(r.tMs),
+        durationMs: Math.round(r.durationMs),
+        fillMax: round3(r.fillMax),
+        elbowMin: round3(r.elbowMin),
+        ok: !!r.ok,
+        conf: round3(r.conf),
       })),
       meta: {
-        fps: Math.round(frameTimes.length
-          ? 1000 / (frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length)
-          : 0),
+        fps,
         engine: 'mediapipe-lite',
         thresholds: { ...DEFAULT_THRESHOLDS, ...(getState().settings.thresholds ?? {}) },
         calibrated: !!calib,
+        frames: totalFrames,
+        poseFrames,
+        avgConf: round3(avgConf),
+        maxFill: round3(maxFill),
+        minElbow: round3(minElbow),
       },
     };
 
+    const diagnostics = {
+      at: Date.now(),
+      fps,
+      frames: totalFrames,
+      poseFrames,
+      avgConf: round3(avgConf),
+      maxFill: round3(maxFill),
+      minElbow: round3(minElbow),
+      valid: counts.valid,
+      invalid: counts.invalid,
+      mode,
+      camera: currentFacing(),
+    };
+
     try {
-      return await api.post('/api/workouts', payload);
+      const res = await api.post('/api/workouts', payload);
+      setSettings({ lastSession: { ...diagnostics, saved: true } });
+      return { saved: true, response: res, diagnostics };
     } catch (err) {
-      console.warn('workout queued for later', err);
-      await queueWorkout(payload);
-      toast('Guardada en el dispositivo. Se subirá al recuperar la conexión.');
-      return null;
+      console.warn('workout not stored', err);
+      // Only a network failure or a server error is worth retrying: a 4xx will
+      // be rejected again for ever.
+      const retryable = err.status === 0 || err.status >= 500;
+      if (retryable) {
+        await queueWorkout(payload);
+        setSettings({ lastSession: { ...diagnostics, saved: false, queued: true } });
+        return {
+          saved: false,
+          queued: true,
+          diagnostics,
+          message: 'Sin conexión con el servidor. La serie se guarda en el dispositivo y se subirá sola.',
+        };
+      }
+      setSettings({ lastSession: { ...diagnostics, saved: false, queued: false, error: err.message } });
+      return {
+        saved: false,
+        queued: false,
+        diagnostics,
+        message: `El servidor rechazó la serie: ${err.message}`,
+      };
     }
   }
 
-  function showResult(elapsed, counts) {
+  function showResult(elapsed, counts, outcome) {
     const content = h('div');
     content.append(
       h('div.result__big',
@@ -507,10 +570,25 @@ export function counterView() {
           : '¡Serie perfecta!'),
       ),
     );
+
+    // The outcome of the upload, always visible.
+    if (outcome) {
+      content.appendChild(h('div.result__status', {
+        class: outcome.saved ? 'result__status--ok' : 'result__status--warn',
+      }, outcome.saved
+        ? 'Guardada en el servidor'
+        : (outcome.message ?? 'No se ha podido guardar la serie')));
+    }
+    if (counts.valid === 0) {
+      content.appendChild(h('p.card__sub', { style: { textAlign: 'center' } },
+        'No he detectado ninguna flexión válida. Revisa la colocación del móvil o baja la exigencia en Perfil → Sensibilidad.'));
+    }
+
     const { close } = openModal(content, { onClose: () => { location.hash = '#/stats'; } });
 
     const summary = h('div.result__grid');
     content.append(summary);
+    content.append(diagnosticsBlock(outcome?.diagnostics));
     content.append(
       h('button.btn.btn--block', {
         onclick: async () => {
@@ -520,7 +598,9 @@ export function counterView() {
       }, 'Ver mis estadísticas'),
     );
 
-    api.post('/api/me/summary').then((data) => {
+    // /api/me/summary only answers GET: posting here answered 405 and the
+    // summary of the modal never loaded.
+    api.get('/api/me/summary').then((data) => {
       summary.replaceChildren(
         h('div.tile', h('div.tile__label', 'Duración'), h('div.tile__value', fmtDuration(elapsed))),
         h('div.tile', h('div.tile__label', 'Ritmo'), h('div.tile__value',
@@ -537,6 +617,25 @@ export function counterView() {
     });
 
     hapticNotify('success');
+  }
+
+  /** The numbers of the last set, so a failed upload can be diagnosed. */
+  function diagnosticsBlock(diag) {
+    if (!diag) return null;
+    const rows = [
+      ['fps', `${diag.fps}`],
+      ['frames con pose', `${diag.poseFrames} de ${diag.frames}`],
+      ['confianza media', fmtNumber(diag.avgConf * 100) + ' %'],
+      ['profundidad máx.', fmtNumber(diag.maxFill * 100) + ' %'],
+      ['ángulo mín. codo', diag.minElbow ? `${Math.round(diag.minElbow)}°` : 'n/d'],
+    ];
+    return h('details.result__diag',
+      h('summary', 'Diagnóstico de la serie'),
+      h('div.result__diagRows', rows.map(([k, v]) => h('div.result__diagRow',
+        h('span', k),
+        h('b', v),
+      ))),
+    );
   }
 
   /* -------------------------------- mount -------------------------------- */

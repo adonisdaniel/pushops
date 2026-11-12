@@ -1,12 +1,13 @@
 GO ?= go
 BIN := bin/pushops
 
-.PHONY: help dev build test test-go test-js fmt vet lint clean
+.PHONY: help dev build test test-browser fmt vet lint clean
 
 help:
 	@echo "dev    arranca el servidor en local (BD en .data/pushops.db)"
 	@echo "build  compila el binario en ./bin/pushops"
 	@echo "test   ejecuta los tests de Go y de JavaScript"
+	@echo "test-browser  smoke test en un navegador real (necesita puppeteer-core)"
 	@echo "fmt    formatea el código"
 	@echo "vet    análisis estático"
 	@echo "clean  borra artefactos"
@@ -25,7 +26,12 @@ build:
 
 test:
 	$(GO) test ./...
-	node --test tests/*.test.mjs
+	node --test tests/detector.test.mjs tests/camera.test.mjs
+
+# Smoke test en un navegador real. Necesita puppeteer-core:
+#   npm install --no-save puppeteer-core
+test-browser:
+	node tests/browser.mjs
 
 fmt:
 	gofmt -w .

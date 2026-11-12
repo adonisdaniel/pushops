@@ -17,10 +17,13 @@ export async function syncPending() {
   try {
     const items = await pendingWorkouts();
     for (const item of items) {
-      const { clientId, queuedAt, ...payload } = item;
+      // The client id has to survive the retry, otherwise the server cannot
+      // tell a retry from a new set and the same workout is stored twice.
+      const { queuedAt, ...payload } = item;
+      void queuedAt;
       try {
         await api.post('/api/workouts', payload);
-        await removePendingWorkout(clientId);
+        await removePendingWorkout(item.clientId);
         synced++;
       } catch (err) {
         failed++;
@@ -28,7 +31,7 @@ export async function syncPending() {
         if (err?.status === 0 || (err?.status >= 500)) break;
         // A validation error is permanent: drop it so the queue does not jam.
         if (err?.status === 400 || err?.status === 422) {
-          await removePendingWorkout(clientId);
+          await removePendingWorkout(item.clientId);
           continue;
         }
         break;

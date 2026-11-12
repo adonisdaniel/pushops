@@ -28,8 +28,9 @@ func TestValidateWorkoutRejectsImpossibleReps(t *testing.T) {
 	}
 }
 
-func TestValidateWorkoutRejectsShortSessions(t *testing.T) {
-	// Ten repetitions cannot fit in two seconds.
+func TestValidateWorkoutDegradesShortSessions(t *testing.T) {
+	// Ten repetitions cannot fit in two seconds. The set is not thrown away:
+	// the surplus is invalidated and the ones that fit are kept.
 	reps := make([]RepInput, 10)
 	for i := range reps {
 		reps[i] = RepInput{TMs: int64(i * 200), DurationMs: 1000, FillMax: 0.9, OK: true, Conf: 0.9}
@@ -40,11 +41,15 @@ func TestValidateWorkoutRejectsShortSessions(t *testing.T) {
 		Reps:      reps,
 	}
 	res := ValidateWorkout(in)
-	if res.ValidCount != 0 {
-		t.Errorf("valid reps = %d, want 0", res.ValidCount)
+	if res.Reason != "" {
+		t.Fatalf("the set must not be rejected: %q", res.Reason)
 	}
-	if res.Reason == "" {
-		t.Error("expected a rejection reason")
+	// Two seconds fit two repetitions of one second each.
+	if res.ValidCount != 2 {
+		t.Errorf("valid reps = %d, want 2", res.ValidCount)
+	}
+	if res.InvalidCount != 8 {
+		t.Errorf("invalid reps = %d, want 8", res.InvalidCount)
 	}
 }
 

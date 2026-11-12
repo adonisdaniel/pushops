@@ -23,3 +23,7 @@ app
 
 # Logs
 *.log
+
+# Dependencias de los tests de navegador
+node_modules/
+package-lock.json

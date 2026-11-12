@@ -29,8 +29,7 @@ type requestFriendRequest struct {
 // requestFriend sends a friendship request to a nickname or Telegram username.
 func (h *Handler) requestFriend(w http.ResponseWriter, r *http.Request) {
 	var req requestFriendRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	query := strings.TrimSpace(req.Query)
@@ -67,8 +66,7 @@ func (h *Handler) respondFriend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req respondFriendRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	if err := h.store.RespondFriend(r.Context(), httpx.UserID(r.Context()), id, req.Accept); err != nil {

@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { coverGeometry, projectPoint } from '../web/js/pose/overlay.js';
 import { AudioFeedback } from '../web/js/pose/audio.js';
 import { FACING } from '../web/js/pose/camera.js';
+import { detectionConfidence, meanVisibility } from '../web/js/pose/landmarks.js';
 
 const CANVAS = { w: 720, h: 1280 };
 const VIDEO = { w: 640, h: 480 };
@@ -85,4 +86,55 @@ test('the audio feedback is silent and safe without an audio context', () => {
   audio.setMuted(true);
   audio.play('valid');
   assert.equal(audio.failed, true);
+});
+
+/**
+ * Landmarks as MediaPipe returns them for a push-up seen from below: the face
+ * and the arms are visible, the legs are hidden by the body itself.
+ */
+function pushUpLandmarks() {
+  const lms = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 1 }));
+  const set = (i, v) => { lms[i].visibility = v; };
+  // Face, viewed from below and foreshortened.
+  for (const i of [0, 1, 2, 3]) set(i, 0.55);
+  for (const i of [4, 5, 6]) set(i, 0.52);
+  set(7, 0.6); set(8, 0.58);
+  set(9, 0.5); set(10, 0.5);
+  // Shoulders and arms: what the skeleton is drawn from.
+  set(11, 0.93); set(12, 0.92);
+  set(13, 0.8); set(14, 0.78);
+  set(15, 0.7); set(16, 0.68);
+  // Hands and hips.
+  for (const i of [17, 18, 19, 20, 21, 22]) set(i, 0.45);
+  set(23, 0.28); set(24, 0.24);
+  // Legs: structurally hidden.
+  set(25, 0.12); set(26, 0.10);
+  set(27, 0.06); set(28, 0.05);
+  set(29, 0.03); set(30, 0.03);
+  set(31, 0.04); set(32, 0.03);
+  return lms;
+}
+
+test('the confidence ignores the landmarks that are hidden by the body', () => {
+  const lms = pushUpLandmarks();
+
+  const old = meanVisibility(lms);
+  const conf = detectionConfidence(lms);
+
+  assert.ok(old < 0.5, `the old metric should be low, was ${old}`);
+  assert.ok(conf > 0.6, `the new confidence should be high, was ${conf}`);
+});
+
+test('the confidence is zero when almost nothing is visible', () => {
+  const lms = pushUpLandmarks().map((l) => ({ ...l, visibility: 0.05 }));
+  assert.equal(detectionConfidence(lms), 0);
+});
+
+test('the confidence is the mean of the visible core landmarks', () => {
+  const lms = pushUpLandmarks();
+  const visible = [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24]
+    .map((i) => lms[i].visibility)
+    .filter((v) => v >= 0.5);
+  const expected = visible.reduce((a, b) => a + b, 0) / visible.length;
+  assert.ok(Math.abs(detectionConfidence(lms) - expected) < 1e-9);
 });

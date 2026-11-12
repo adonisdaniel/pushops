@@ -120,7 +120,41 @@ export function bodyAnchor(lms) {
   return null;
 }
 
-/** Average visibility across all landmarks, used as a detection confidence. */
+/**
+ * Landmarks the detector actually relies on. Everything else (feet, heels,
+ * toes) is structurally hidden in a push-up and must not drag the detection
+ * confidence down.
+ */
+export const CORE_LANDMARKS = [
+  LM.NOSE,
+  LM.LEFT_EYE, LM.RIGHT_EYE,
+  LM.LEFT_EAR, LM.RIGHT_EAR,
+  LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER,
+  LM.LEFT_ELBOW, LM.RIGHT_ELBOW,
+  LM.LEFT_WRIST, LM.RIGHT_WRIST,
+  LM.LEFT_HIP, LM.RIGHT_HIP,
+];
+
+/**
+ * Confidence of the detection: the mean visibility of the core landmarks that
+ * are actually visible. Averaging all 33 landmarks would be meaningless, the
+ * feet and hips are hidden in a push-up seen from below.
+ *
+ * Returns 0 when fewer than three core landmarks are visible.
+ */
+export function detectionConfidence(lms) {
+  const values = [];
+  for (const i of CORE_LANDMARKS) {
+    const v = lms[i]?.visibility ?? 0;
+    if (v >= MIN_VISIBILITY) values.push(v);
+  }
+  if (values.length < 3) return 0;
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum / values.length;
+}
+
+/** Average visibility across all landmarks. Only used for diagnostics. */
 export function meanVisibility(lms) {
   let sum = 0;
   let n = 0;

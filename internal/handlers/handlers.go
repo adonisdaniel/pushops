@@ -78,6 +78,25 @@ func (h *Handler) Register(r chi.Router) {
 	})
 }
 
+// decode reads the JSON body of a request and, when it fails, logs the real
+// cause and answers with a message that says what was wrong.
+//
+// Swallowing the decoder error once cost an afternoon: every workout was
+// rejected with "cuerpo de la petición inválido" and the real reason
+// ("cannot unmarshal number 12345.678 into Go value of type int64") never
+// reached the logs.
+func (h *Handler) decode(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := httpx.DecodeJSON(r, dst); err != nil {
+		h.logger.Warn("invalid request body",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"error", err.Error())
+		httpx.Error(w, http.StatusBadRequest, "petición inválida: "+err.Error())
+		return false
+	}
+	return true
+}
+
 func (h *Handler) verifyToken(token string) (int64, error) {
 	claims, err := h.issuer.Verify(token)
 	if err != nil {

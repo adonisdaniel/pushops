@@ -260,8 +260,38 @@ La app es cliente y no se fía de nada de lo que reportan. El servidor:
 ## Desarrollo
 
 ```bash
-make dev        # arranca el servidor en local
-make test       # tests de Go
-make build      # binario en ./bin/pushops
-make fmt        # gofmt
+make dev           # arranca el servidor en local
+make test          # tests de Go y de JavaScript
+make test-browser  # smoke test en un navegador real
+make build         # binario en ./bin/pushops
+make fmt           # gofmt
 ```
+
+El smoke test abre la app en Chrome, recorre las cinco vistas y guarda una serie
+de verdad contra el servidor. Necesita `puppeteer-core`:
+
+```bash
+npm install --no-save puppeteer-core
+npx puppeteer browsers install chrome   # solo la primera vez
+make test-browser
+```
+
+Fue así como aparecieron los bugs más molestos: la vista de amigos reventando
+por un `null`, las barras tapando la cámara y el 405 de un `POST` donde solo
+había `GET`.
+
+---
+
+## Cuando algo no se guarda
+
+La app nunca falla en silencio:
+
+- El **informe de serie** dice si se guardó o si el servidor la rechazó, con el
+  motivo literal.
+- El **diagnóstico** (detalle desplegable del informe, y *Perfil → Última
+  serie*) muestra los fps, los frames con pose detectada, la confianza media,
+  la profundidad máxima y el ángulo mínimo de codo.
+- El **servidor loguea** el motivo de cada serie rechazada, con el error real
+  del decoder si el problema era el formato de la petición.
+- Un rechazo con 4xx **no** se reintenta: solo se guarda en la cola local
+  cuando el fallo es de red o del servidor.

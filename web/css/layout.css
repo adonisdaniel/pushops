@@ -161,11 +161,13 @@
 
 /* --- toasts --- */
 
+/* Above the modal (z-index 100): an upload error must never be hidden
+   behind the result sheet. */
 .toasts {
   position: fixed;
   left: 50%;
   bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 14px);
-  z-index: 90;
+  z-index: 120;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;

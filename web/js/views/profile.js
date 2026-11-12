@@ -91,6 +91,8 @@ export function profileView() {
         ),
       ),
 
+      lastSessionBlock(),
+
       h('div.view__section',
         h('div.section-head', h('h2', 'Cuenta')),
         h('div.list',
@@ -139,6 +141,37 @@ export function profileView() {
       }, label));
     }
     return wrap;
+  }
+
+  /** Diagnostics of the last set, so a failed upload is never a mystery. */
+  function lastSessionBlock() {
+    const s = getState().settings.lastSession;
+    if (!s) return null;
+    const status = s.saved
+      ? h('span.badge.badge--accent', 'guardada')
+      : s.queued
+        ? h('span.badge.badge--warn', 'en cola')
+        : h('span.badge.badge--danger', 'rechazada');
+
+    const rows = [
+      ['fps', s.fps],
+      ['frames con pose', `${s.poseFrames} de ${s.frames}`],
+      ['confianza media', `${Math.round((s.avgConf ?? 0) * 100)} %`],
+      ['profundidad máx.', `${Math.round((s.maxFill ?? 0) * 100)} %`],
+      ['ángulo mín. codo', s.minElbow ? `${Math.round(s.minElbow)}°` : 'n/d'],
+      ['flexiones', `${s.valid} válidas · ${s.invalid} incompletas`],
+    ];
+
+    return h('div.view__section',
+      h('div.section-head', h('h2', 'Última serie'), status),
+      h('div.card',
+        h('div.result__diagRows', rows.map(([k, v]) => h('div.result__diagRow',
+          h('span', k),
+          h('b', String(v)),
+        ))),
+        s.error ? h('div.field__error', { style: { marginTop: '8px' } }, s.error) : null,
+      ),
+    );
   }
 
   function cameraPicker() {

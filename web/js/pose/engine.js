@@ -4,7 +4,7 @@
 // ever leaves the phone. The engine exposes a small surface so a different
 // backend (MoveNet, for instance) can be dropped in later.
 
-import { meanVisibility } from './landmarks.js';
+import { detectionConfidence } from './landmarks.js';
 
 const WASM_PATH = '/static/vendor/mediapipe/wasm';
 const MODEL_PATH = '/static/models/pose_landmarker_lite.task';
@@ -83,7 +83,7 @@ export class PoseEngine {
       landmarks: lms,
       worldLandmarks: result?.worldLandmarks?.[0] ?? null,
       mask: result?.segmentationMasks?.[0] ?? null,
-      confidence: meanVisibility(lms),
+      confidence: detectionConfidence(lms),
       timestamp: timestampMs,
     };
   }

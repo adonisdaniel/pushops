@@ -7,7 +7,10 @@ const (
 	MinRepDurationMs  = 900
 	MaxRepDurationMs  = 15000
 	MaxRepsPerWorkout = 500
-	MinAvgConfidence  = 0.50
+	// MinRepConfidence is the per-repetition detection confidence below which a
+	// repetition is not counted. It never invalidates a whole set: a doubtful
+	// repetition loses its points, the workout is still stored.
+	MinRepConfidence = 0.35
 	// MaxWorkoutDurationMs bounds a single session (3 hours is already absurd).
 	MaxWorkoutDurationMs = 3 * 60 * 60 * 1000
 )
@@ -85,6 +88,12 @@ func ValidateWorkout(in *WorkoutInput) ValidationResult {
 			in.Reps[i] = r
 		}
 
+		// A doubtful detection only costs that repetition its points.
+		if r.OK && r.Conf > 0 && r.Conf < MinRepConfidence {
+			r.OK = false
+			in.Reps[i] = r
+		}
+
 		if r.OK {
 			res.ValidCount++
 			totalRepMs += ms
@@ -104,18 +113,27 @@ func ValidateWorkout(in *WorkoutInput) ValidationResult {
 	}
 	res.BestRepMs = best
 
-	// The set must be long enough for the number of valid reps it claims.
+	// The session cannot hold more repetitions than its duration allows. The
+	// surplus is invalidated instead of throwing the whole set away.
 	if res.ValidCount > 0 {
-		minNeeded := int64(res.ValidCount) * MinRepDurationMs
-		if duration < minNeeded {
-			res.Reason = "workout shorter than the reported repetitions require"
-			res.ValidCount = 0
-			res.InvalidCount = len(in.Reps)
-		}
-		if res.AvgConf > 0 && res.AvgConf < MinAvgConfidence {
-			res.Reason = "detection confidence too low"
-			res.ValidCount = 0
-			res.InvalidCount = len(in.Reps)
+		allowed := int(duration / MinRepDurationMs)
+		if allowed < res.ValidCount {
+			kept := 0
+			for i := range in.Reps {
+				if !in.Reps[i].OK {
+					continue
+				}
+				if kept < allowed {
+					kept++
+					continue
+				}
+				in.Reps[i].OK = false
+				res.ValidCount--
+				res.InvalidCount++
+			}
+			if res.ValidCount > 0 {
+				res.AvgRepMs = totalRepMs / int64(res.ValidCount)
+			}
 		}
 	}
 	res.Reps = in.Reps

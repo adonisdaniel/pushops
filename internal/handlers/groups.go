@@ -26,8 +26,7 @@ type createGroupRequest struct {
 // createGroup creates a group owned by the viewer.
 func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	var req createGroupRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -50,8 +49,7 @@ type joinGroupRequest struct {
 // joinGroup joins a group using an invite code.
 func (h *Handler) joinGroup(w http.ResponseWriter, r *http.Request) {
 	var req joinGroupRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	group, err := h.store.JoinGroup(r.Context(), httpx.UserID(r.Context()), req.Code)

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -10,15 +11,52 @@ import (
 	"github.com/adonis/pushops/internal/httpx"
 )
 
+// repPayload is a repetition as the client sends it.
+//
+// The timestamps arrive as JSON numbers with decimals (performance.now() has
+// sub-millisecond precision), so they are decoded as float64 and rounded.
+// Decoding them straight into an int64 made every single workout fail with
+// "json: cannot unmarshal number 12345.678 into Go value of type int64".
+type repPayload struct {
+	TMs        float64 `json:"tMs"`
+	DurationMs float64 `json:"durationMs"`
+	FillMax    float64 `json:"fillMax"`
+	ElbowMin   float64 `json:"elbowMin"`
+	OK         bool    `json:"ok"`
+	Conf       float64 `json:"conf"`
+}
+
 type createWorkoutRequest struct {
-	ClientID  string            `json:"clientId"`
-	Variant   string            `json:"variant"`
-	Mode      string            `json:"mode"`
-	StartedAt int64             `json:"startedAt"`
-	EndedAt   int64             `json:"endedAt"`
-	LocalDate string            `json:"localDate"`
-	Reps      []domain.RepInput `json:"reps"`
-	Meta      map[string]any    `json:"meta"`
+	ClientID  string         `json:"clientId"`
+	Variant   string         `json:"variant"`
+	Mode      string         `json:"mode"`
+	StartedAt float64        `json:"startedAt"`
+	EndedAt   float64        `json:"endedAt"`
+	LocalDate string         `json:"localDate"`
+	Reps      []repPayload   `json:"reps"`
+	Meta      map[string]any `json:"meta"`
+}
+
+// toDomain converts the wire format into the domain model.
+func (r *createWorkoutRequest) toDomain() *domain.WorkoutInput {
+	reps := make([]domain.RepInput, 0, len(r.Reps))
+	for _, p := range r.Reps {
+		reps = append(reps, domain.RepInput{
+			TMs:        int64(math.Round(p.TMs)),
+			DurationMs: int64(math.Round(p.DurationMs)),
+			FillMax:    p.FillMax,
+			ElbowMin:   p.ElbowMin,
+			OK:         p.OK,
+			Conf:       p.Conf,
+		})
+	}
+	return &domain.WorkoutInput{
+		Variant:   r.Variant,
+		Mode:      r.Mode,
+		StartedAt: int64(math.Round(r.StartedAt)),
+		EndedAt:   int64(math.Round(r.EndedAt)),
+		Reps:      reps,
+	}
 }
 
 // validModes are the camera placements the detector supports.
@@ -28,8 +66,7 @@ var validModes = map[string]bool{"suelo": true, "perfil": true, "manual": true}
 // valid and computes the score; the client is never trusted for either.
 func (h *Handler) createWorkout(w http.ResponseWriter, r *http.Request) {
 	var req createWorkoutRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	if req.Variant == "" {
@@ -39,38 +76,39 @@ func (h *Handler) createWorkout(w http.ResponseWriter, r *http.Request) {
 		req.Mode = "suelo"
 	}
 	if !validModes[req.Mode] {
+		h.logger.Warn("workout rejected", "reason", "unknown camera mode", "mode", req.Mode)
 		httpx.Error(w, http.StatusBadRequest, "modo de cámara desconocido")
 		return
 	}
 	variant := domain.VariantByKey(req.Variant)
 
-	in := &domain.WorkoutInput{
-		Variant:   req.Variant,
-		Mode:      req.Mode,
-		StartedAt: req.StartedAt,
-		EndedAt:   req.EndedAt,
-		Reps:      req.Reps,
-	}
+	in := req.toDomain()
 	result := domain.ValidateWorkout(in)
 	if result.Reason != "" {
+		h.logger.Warn("workout rejected",
+			"reason", result.Reason,
+			"user", httpx.UserID(r.Context()),
+			"reps", len(result.Reps))
 		httpx.Error(w, http.StatusUnprocessableEntity, "la sesión no supera las comprobaciones: "+result.Reason)
 		return
 	}
 	if len(result.Reps) == 0 {
+		h.logger.Warn("workout rejected", "reason", "no repetitions", "user", httpx.UserID(r.Context()))
 		httpx.Error(w, http.StatusBadRequest, "la sesión no contiene repeticiones")
 		return
 	}
 
 	userID := httpx.UserID(r.Context())
-	localDate := sanitizeLocalDate(req.LocalDate, req.EndedAt)
+	localDate := sanitizeLocalDate(req.LocalDate, int64(math.Round(req.EndedAt)))
 
 	// Score with the body weight that was declared at the time of the workout.
-	weight, err := h.store.WeightAt(r.Context(), userID, req.StartedAt)
+	weight, err := h.store.WeightAt(r.Context(), userID, int64(math.Round(req.StartedAt)))
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
-	dates, err := h.store.ActiveDates(r.Context(), userID, req.StartedAt-90*24*3600*1000, req.EndedAt)
+	dates, err := h.store.ActiveDates(r.Context(), userID,
+		int64(math.Round(req.StartedAt))-90*24*3600*1000, int64(math.Round(req.EndedAt)))
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -90,8 +128,8 @@ func (h *Handler) createWorkout(w http.ResponseWriter, r *http.Request) {
 		ClientID:   strings.TrimSpace(req.ClientID),
 		Variant:    req.Variant,
 		Mode:       req.Mode,
-		StartedAt:  req.StartedAt,
-		EndedAt:    req.EndedAt,
+		StartedAt:  int64(math.Round(req.StartedAt)),
+		EndedAt:    int64(math.Round(req.EndedAt)),
 		LocalDate:  localDate,
 		DurationMs: result.DurationMs,
 		RepsTotal:  len(result.Reps),

@@ -27,6 +27,7 @@ function loadSettings() {
     camera: { suelo: 'user', perfil: 'environment' },
     muted: false,             // silences the repetition beep
     manualCount: false,
+    lastSession: null,        // diagnostics of the last set
   };
   try {
     const raw = localStorage.getItem('pushops.settings');

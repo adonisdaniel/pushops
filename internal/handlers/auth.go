@@ -19,8 +19,7 @@ type authRequest struct {
 // authTelegram validates Telegram initData and returns a session token.
 func (h *Handler) authTelegram(w http.ResponseWriter, r *http.Request) {
 	var req authRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	if !h.cfg.HasTelegram() {
@@ -70,8 +69,7 @@ func (h *Handler) authDev(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req devAuthRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	if req.TgID <= 0 {
@@ -139,8 +137,7 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) patchMe(w http.ResponseWriter, r *http.Request) {
 	var req patchMeRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "cuerpo de la petición inválido")
+	if !h.decode(w, r, &req) {
 		return
 	}
 	userID := httpx.UserID(r.Context())
