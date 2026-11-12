@@ -18,14 +18,19 @@ export const isTelegram = tg.available && !!tg.initData;
 
 /** Initialise the WebApp: theme, viewport, and the initial ready() handshake. */
 export function initTelegram() {
-  if (!tg.available) {
+  // The script loads in any browser, so the presence of the script is not
+  // enough: only a real Telegram session has initData. Outside Telegram the
+  // app must use its own palette.
+  if (!tg.available || !isTelegram) {
     document.body.dataset.telegram = 'false';
     document.body.dataset.colorScheme = prefersLight() ? 'light' : 'dark';
+    applySafeArea();
     return;
   }
   document.body.dataset.telegram = 'true';
   document.body.dataset.colorScheme = tg.colorScheme;
   applyThemeParams();
+  applySafeArea();
   tg.raw.ready();
   tg.raw.expand();
   tg.raw.onEvent?.('themeChanged', () => {
@@ -34,12 +39,40 @@ export function initTelegram() {
   });
   tg.raw.onEvent?.('viewportChanged', () => {
     document.documentElement.style.setProperty('--tg-viewport-height', `${tg.raw.viewportHeight}px`);
+    applySafeArea();
   });
+  // The Telegram header floats over the WebView: safeAreaInset is the system
+  // status bar and contentSafeAreaInset is what the Telegram UI covers.
+  tg.raw.onEvent?.('safeAreaChanged', applySafeArea);
+  tg.raw.onEvent?.('contentSafeAreaChanged', applySafeArea);
   // Keep the header transparent in fullscreen so the camera can bleed to the top.
   try {
     tg.raw.setHeaderColor?.('secondary_bg_color');
     tg.raw.setBackgroundColor?.('bg_color');
   } catch { /* older clients */ }
+}
+
+/**
+ * Publishes the safe areas as CSS custom properties.
+ *
+ * `env(safe-area-inset-*)` is always 0 inside the Telegram WebView, so the
+ * top bar ended up underneath the phone's status bar. Telegram reports the real
+ * insets through safeAreaInset and contentSafeAreaInset.
+ */
+export function applySafeArea() {
+  const safe = tg.raw?.safeAreaInset ?? {};
+  const content = tg.raw?.contentSafeAreaInset ?? {};
+  const root = document.documentElement.style;
+  const px = (value) => `${Math.max(0, Number(value) || 0)}px`;
+
+  root.setProperty('--tg-safe-top', px(safe.top));
+  root.setProperty('--tg-safe-bottom', px(safe.bottom));
+  root.setProperty('--tg-safe-left', px(safe.left));
+  root.setProperty('--tg-safe-right', px(safe.right));
+  root.setProperty('--tg-content-top', px(content.top));
+  root.setProperty('--tg-content-bottom', px(content.bottom));
+  root.setProperty('--tg-viewport-height', px(tg.raw?.viewportHeight));
+  root.setProperty('--tg-stable-height', px(tg.raw?.viewportStableHeight));
 }
 
 function prefersLight() {

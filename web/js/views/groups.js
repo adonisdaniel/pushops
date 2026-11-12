@@ -1,7 +1,7 @@
 // Groups: create, join by invite code and per-group leaderboards.
 
 import { api } from '../api.js';
-import { h, fmtNumber, fmtDecimal, avatar, loading, emptyState, toast, promptModal, confirmModal } from '../ui.js';
+import { avatar, confirmModal, emptyState, fill, fmtDecimal, fmtNumber, h, loading, promptModal, toast } from '../ui.js';
 
 export function groupsView() {
   const el = h('div');
@@ -13,12 +13,12 @@ export function groupsView() {
       const data = await api.get('/api/groups');
       render(data.groups ?? []);
     } catch (err) {
-      content.replaceChildren(emptyState('⚠️', 'No se pudieron cargar tus grupos', err.message));
+      fill(content, emptyState('⚠️', 'No se pudieron cargar tus grupos', err.message));
     }
   }
 
   function render(groups) {
-    content.replaceChildren(
+    fill(content, 
       h('div.view__section',
         h('div', { style: { display: 'flex', gap: '8px' } },
           h('button.btn.grow', { onclick: createGroup }, 'Crear grupo'),
@@ -102,7 +102,7 @@ export function groupDetailView(route) {
       ]);
       render(group.group, stats, board.entries ?? []);
     } catch (err) {
-      content.replaceChildren(emptyState('⚠️', 'No se pudo cargar el grupo', err.message));
+      fill(content, emptyState('⚠️', 'No se pudo cargar el grupo', err.message));
     }
   }
 
@@ -111,7 +111,7 @@ export function groupDetailView(route) {
     const members = stats.members ?? [];
     const max = Math.max(...members.map((m) => m.value), 1);
 
-    content.replaceChildren(
+    fill(content, 
       h('div.view__section',
         h('div.card',
           h('div.flex-between',

@@ -3,7 +3,7 @@
 import { api } from '../api.js';
 import { getState, setSettings, queueWorkout } from '../store.js';
 import { haptic, hapticNotify, hapticSelect, requestFullscreen, lockOrientation, unlockOrientation, isTelegram } from '../tg.js';
-import { h, toast, fmtDuration, fmtNumber, openModal, localDate } from '../ui.js';
+import { fill, fmtDuration, fmtNumber, h, localDate, openModal, toast } from '../ui.js';
 import { CameraSession, FACING } from '../pose/camera.js';
 import { Overlay } from '../pose/overlay.js';
 import { AudioFeedback } from '../pose/audio.js';
@@ -111,7 +111,7 @@ export function counterView() {
     const facing = currentFacing();
     root.classList.add('counter--guide');
     showChrome(true);
-    root.replaceChildren(
+    fill(root, 
       h('div.guide',
         h('div.guide__art', guideArt(mode, facing)),
         h('h2.guide__title', info.title),
@@ -153,8 +153,8 @@ export function counterView() {
   function renderLive() {
     root.classList.remove('counter--guide');
     showChrome(false);
-    root.replaceChildren(stage, bar);
-    stage.replaceChildren(video, canvas, ringHost, hud, repsBox);
+    fill(root, stage, bar);
+    fill(stage, video, canvas, ringHost, hud, repsBox);
     renderHud();
     renderBar();
   }
@@ -174,7 +174,7 @@ export function counterView() {
 
   function renderHud() {
     const muted = getState().settings.muted;
-    hud.replaceChildren(
+    fill(hud, 
       h('div.counter__pill', h('span.counter__dot.counter__dot--live'), mode === 'suelo' ? 'Modo suelo' : 'Modo lateral'),
       h('div.counter__hud-right',
         h('div.counter__pill', { id: 'fps-pill' }, '— fps'),
@@ -228,7 +228,7 @@ export function counterView() {
   }
 
   function renderBar() {
-    bar.replaceChildren(
+    fill(bar, 
       h('button.counter__btn.counter__btn--stop', { onclick: () => void stop() }, 'Terminar serie'),
       h('div.counter__subrow',
         h('button.btn.btn--sm', { onclick: () => void recalibrate() }, 'Recalibrar'),
@@ -293,7 +293,7 @@ export function counterView() {
   }
 
   function renderError(message) {
-    root.replaceChildren(
+    fill(root, 
       h('div.guide',
         h('div.guide__art', guideArt(mode, currentFacing())),
         h('h2.guide__title', 'No podemos usar la cámara'),
@@ -444,7 +444,7 @@ export function counterView() {
     if (!counter) return;
     const counts = counter.counts;
     const elapsed = running ? Date.now() - startedAt : 0;
-    repsBox.replaceChildren(
+    fill(repsBox, 
       h('div.counter__num', String(counts.valid)),
       h('div.counter__meta',
         counts.invalid > 0 ? h('span', h('b', String(counts.invalid)), ' incompletas · ') : null,
@@ -601,7 +601,7 @@ export function counterView() {
     // /api/me/summary only answers GET: posting here answered 405 and the
     // summary of the modal never loaded.
     api.get('/api/me/summary').then((data) => {
-      summary.replaceChildren(
+      fill(summary, 
         h('div.tile', h('div.tile__label', 'Duración'), h('div.tile__value', fmtDuration(elapsed))),
         h('div.tile', h('div.tile__label', 'Ritmo'), h('div.tile__value',
           fmtNumber((counts.valid / Math.max(1, elapsed / 60000)) * 10) / 10, h('span.tile__unit', 'rep/min'))),
@@ -611,7 +611,7 @@ export function counterView() {
           fmtNumber(data?.summary?.totalReps ?? 0))),
       );
     }).catch(() => {
-      summary.replaceChildren(
+      fill(summary, 
         h('div.tile', h('div.tile__label', 'Duración'), h('div.tile__value', fmtDuration(elapsed))),
       );
     });
@@ -656,17 +656,20 @@ export function counterView() {
 }
 
 /**
- * Line art of the phone placement. The camera dot moves depending on which
- * camera is selected: with the phone screen up the selfie lens points at the
- * body, with the screen down it is the rear lens that does.
+ * Placement diagram, side view: the phone lies on the floor and the person is
+ * in the plank position. The cone shows what the camera sees, which is the
+ * thing the old drawing did not communicate at all.
+ *
+ * @param {string} mode   'suelo' | 'perfil'
+ * @param {string} facing 'user' | 'environment'
  */
 function guideArt(mode, facing = FACING.FRONT) {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 120 120');
+  svg.setAttribute('viewBox', '0 0 160 110');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2.4');
+  svg.setAttribute('stroke-width', '2.6');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
   svg.style.color = 'var(--accent)';
@@ -677,46 +680,46 @@ function guideArt(mode, facing = FACING.FRONT) {
     svg.appendChild(node);
     return node;
   };
-  const front = facing === FACING.FRONT;
 
-  if (mode === 'suelo') {
-    // Floor.
-    add('path', { d: 'M10 108 H110', opacity: '.2' });
+  const suelo = mode === 'suelo';
 
-    // Phone lying flat, camera dot on the face that points up.
-    add('rect', { x: '42', y: '96', width: '36', height: '9', rx: '2.5' });
-    if (front) {
-      add('circle', { cx: '71', cy: '94', r: '2.8', fill: 'currentColor', stroke: 'none' });
-      add('path', { d: 'M46 97.5 H58', opacity: '.35' });
-    } else {
-      add('circle', { cx: '71', cy: '107', r: '2.8', fill: 'currentColor', stroke: 'none' });
-      add('path', { d: 'M46 103.5 H58', opacity: '.35' });
+  // The floor.
+  add('path', { d: 'M8 96 H152', opacity: '.22', 'stroke-width': '2' });
+
+  // The person, in plank, seen from the side and facing left. In the lateral
+  // mode the body is shifted to the right so the phone has its own space.
+  const dx = suelo ? 0 : 18;
+  add('circle', { cx: 44 + dx, cy: '30', r: '10' });
+  add('path', { d: `M${52 + dx} 37 L${94 + dx} 52` });          // back
+  add('path', { d: `M${52 + dx} 37 L${42 + dx} 62 L${34 + dx} 96` }); // arm
+  add('path', { d: `M${94 + dx} 52 L${112 + dx} 74 L${126 + dx} 96` }); // leg
+
+  if (suelo) {
+    // The phone lies right under the chest, with the lens on the upper face.
+    add('path', {
+      d: 'M66 88 L50 46 L82 46 Z',
+      fill: 'currentColor', 'fill-opacity': '.13', stroke: 'none',
+    });
+    add('path', { d: 'M66 88 L50 46 M66 88 L82 46', opacity: '.3', 'stroke-width': '1.6' });
+    add('rect', { x: '50', y: '88', width: '32', height: '9', rx: '2.5', fill: 'var(--bg)' });
+    add('circle', { cx: '66', cy: '87', r: '3', fill: 'currentColor', stroke: 'none' });
+    // The screen is the visible face when the selfie camera is used.
+    if (facing === FACING.FRONT) {
+      add('path', { d: 'M55 91 H71', opacity: '.45', 'stroke-width': '1.6' });
     }
-
-    // Field of view towards the body.
-    add('path', { d: 'M60 92 L60 62', opacity: '.35', 'stroke-dasharray': '3 4' });
-
-    // Person seen from below.
-    add('circle', { cx: '60', cy: '24', r: '11' });
-    add('path', { d: 'M60 35 L60 56' });
-    add('path', { d: 'M60 40 L38 52 M60 40 L82 52' });
-    add('path', { d: 'M38 52 L44 92 M82 52 L76 92' });
   } else {
-    // Person in profile with the phone on the floor at the side.
-    add('circle', { cx: '40', cy: '26', r: '10' });
-    add('path', { d: 'M44 34 L70 52 L68 78' });
-    add('path', { d: 'M44 36 L58 58 M46 40 L34 60' });
-    add('path', { d: 'M68 78 L82 96 M46 40 L38 96' });
-
-    // Phone standing on its side, lens facing the body.
-    add('rect', { x: '86', y: '88', width: '24', height: '9', rx: '2.5' });
-    if (front) {
-      add('circle', { cx: '91', cy: '92.5', r: '2.6', fill: 'currentColor', stroke: 'none' });
-    } else {
-      add('circle', { cx: '105', cy: '92.5', r: '2.6', fill: 'currentColor', stroke: 'none' });
+    // The phone lies on the floor at one side, aimed at the whole body.
+    add('path', {
+      d: 'M26 92 L74 34 L74 72 Z',
+      fill: 'currentColor', 'fill-opacity': '.13', stroke: 'none',
+    });
+    add('path', { d: 'M26 92 L74 34 M26 92 L74 72', opacity: '.3', 'stroke-width': '1.6' });
+    add('rect', { x: '4', y: '87', width: '22', height: '9', rx: '2.5', fill: 'var(--bg)' });
+    add('circle', { cx: '26', cy: '91', r: '3', fill: 'currentColor', stroke: 'none' });
+    if (facing === FACING.FRONT) {
+      add('path', { d: 'M8 90 H16', opacity: '.45', 'stroke-width': '1.6' });
     }
-    add('path', { d: 'M84 84 L84 74', opacity: '.4' });
-    add('path', { d: 'M96 84 L96 74', opacity: '.4' });
   }
+
   return svg;
 }

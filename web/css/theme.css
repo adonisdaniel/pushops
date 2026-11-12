@@ -1,80 +1,122 @@
 /* Theme: design tokens, optionally overridden by Telegram's theme params. */
 
-:root {
-  /* Fallback palette */
-  --bg:            #0d1015;
-  --bg-elevated:   #151a21;
-  --surface:       #151a21;
-  --surface-2:     #1c222b;
-  --fg:            #e9edf2;
-  --fg-muted:      #9aa5b4;
-  --fg-dim:        #66707d;
-  --border:        #262d38;
-  --border-strong: #333c49;
+/*
+ * The Telegram overrides below used to fall back to the very variable they were
+ * overriding (`--accent: var(--tg-theme-button-color, var(--accent))`). That is
+ * a cyclic reference: the property becomes invalid at computed-value time and
+ * the variable resolves to nothing. Inside Telegram it went unnoticed because
+ * the Telegram variable always exists, but outside it the whole app lost its
+ * colours. So every token has a `*-base` value that is safe to fall back to.
+ */
 
-  /* Brand */
-  --accent:        #3ddc84;
-  --accent-soft:   rgba(61, 220, 132, .14);
-  --accent-fg:     #06230f;
-  --info:          #4cc2ff;
-  --warn:          #fbbf24;
-  --danger:        #fb7185;
+:root {
+  /* Fallback palette (dark) */
+  --bg-base:            #0d1015;
+  --bg-elevated-base:   #151a21;
+  --surface-base:       #151a21;
+  --surface-2-base:     #1c222b;
+  --fg-base:            #e9edf2;
+  --fg-muted-base:      #9aa5b4;
+  --fg-dim-base:        #66707d;
+  --border-base:        #262d38;
+  --border-strong-base: #333c49;
+  --accent-base:        #3ddc84;
+  --accent-fg-base:     #06230f;
+  --accent-soft-base:   rgba(61, 220, 132, .14);
+  --shadow-1-base:      0 1px 2px rgba(0,0,0,.3);
+  --shadow-2-base:      0 6px 24px rgba(0,0,0,.35);
+  --shadow-3-base:      0 18px 48px rgba(0,0,0,.45);
+
+  --bg:            var(--bg-base);
+  --bg-elevated:   var(--bg-elevated-base);
+  --surface:       var(--surface-base);
+  --surface-2:     var(--surface-2-base);
+  --fg:            var(--fg-base);
+  --fg-muted:      var(--fg-muted-base);
+  --fg-dim:        var(--fg-dim-base);
+  --border:        var(--border-base);
+  --border-strong: var(--border-strong-base);
+  --accent:        var(--accent-base);
+  --accent-fg:     var(--accent-fg-base);
+  --accent-soft:   var(--accent-soft-base);
+
+  --shadow-1: var(--shadow-1-base);
+  --shadow-2: var(--shadow-2-base);
+  --shadow-3: var(--shadow-3-base);
+
+  --info:    #4cc2ff;
+  --warn:    #fbbf24;
+  --danger:  #fb7185;
 
   --radius-sm: 10px;
   --radius:    14px;
   --radius-lg: 20px;
   --radius-xl: 28px;
 
-  --shadow-1: 0 1px 2px rgba(0,0,0,.3);
-  --shadow-2: 0 6px 24px rgba(0,0,0,.35);
-  --shadow-3: 0 18px 48px rgba(0,0,0,.45);
-
   --tab-h: 62px;
   --pad: 16px;
+
+  /*
+   * Inside the Telegram WebView `env(safe-area-inset-*)` is always 0, so the
+   * insets Telegram reports are published as custom properties by tg.js and
+   * combined here. --app-top clears the phone's status bar and the floating
+   * Telegram header; --app-bottom clears the navigation bar.
+   */
+  --app-top: max(env(safe-area-inset-top, 0px), var(--tg-content-top, 0px));
+  --app-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-bottom, 0px), var(--tg-content-bottom, 0px));
+  --viewport-h: var(--tg-stable-height, 100dvh);
 
   --ease: cubic-bezier(.22, 1, .36, 1);
 }
 
-/* Telegram provides these as CSS variables; map them onto our tokens. */
-body[data-telegram="true"] {
-  --bg:            var(--tg-theme-bg-color, var(--bg));
-  --bg-elevated:   var(--tg-theme-section-bg-color, var(--surface));
-  --surface:       var(--tg-theme-secondary-bg-color, var(--surface));
-  --surface-2:     color-mix(in srgb, var(--surface) 82%, var(--fg) 6%);
-  --fg:            var(--tg-theme-text-color, var(--fg));
-  --fg-muted:      var(--tg-theme-hint-color, var(--fg-muted));
-  --border:        color-mix(in srgb, var(--fg) 12%, transparent);
-  --border-strong: color-mix(in srgb, var(--fg) 22%, transparent);
-  --accent:        var(--tg-theme-button-color, var(--accent));
-  --accent-fg:     var(--tg-theme-button-text-color, var(--accent-fg));
-}
-
+/* Light mode: only the base values change. */
 body[data-color-scheme="light"] {
-  --bg:            #f4f6f8;
-  --bg-elevated:   #ffffff;
-  --surface:       #ffffff;
-  --surface-2:     #eef1f5;
-  --fg:            #10151c;
-  --fg-muted:      #5b6673;
-  --fg-dim:        #8b95a2;
-  --border:        #e3e8ee;
-  --border-strong: #cfd6de;
-  --accent:        #12b76a;
-  --accent-soft:   rgba(18, 183, 106, .12);
-  --accent-fg:     #ffffff;
-  --shadow-1: 0 1px 2px rgba(16,21,28,.06);
-  --shadow-2: 0 6px 20px rgba(16,21,28,.08);
-  --shadow-3: 0 18px 44px rgba(16,21,28,.12);
+  --bg-base:            #f4f6f8;
+  --bg-elevated-base:   #ffffff;
+  --surface-base:       #ffffff;
+  --surface-2-base:     #eef1f5;
+  --fg-base:            #10151c;
+  --fg-muted-base:      #5b6673;
+  --fg-dim-base:        #8b95a2;
+  --border-base:        #e3e8ee;
+  --border-strong-base: #cfd6de;
+  --accent-base:        #12b76a;
+  --accent-fg-base:     #ffffff;
+  --accent-soft-base:   rgba(18, 183, 106, .12);
+  --shadow-1-base:      0 1px 2px rgba(16,21,28,.06);
+  --shadow-2-base:      0 6px 20px rgba(16,21,28,.08);
+  --shadow-3-base:      0 18px 44px rgba(16,21,28,.12);
+
+  --bg: var(--bg-base);
+  --bg-elevated: var(--bg-elevated-base);
+  --surface: var(--surface-base);
+  --surface-2: var(--surface-2-base);
+  --fg: var(--fg-base);
+  --fg-muted: var(--fg-muted-base);
+  --fg-dim: var(--fg-dim-base);
+  --border: var(--border-base);
+  --border-strong: var(--border-strong-base);
+  --accent: var(--accent-base);
+  --accent-fg: var(--accent-fg-base);
+  --accent-soft: var(--accent-soft-base);
 }
 
-body[data-color-scheme="light"][data-telegram="true"] {
-  --bg:          var(--tg-theme-bg-color, var(--bg));
-  --surface:     var(--tg-theme-secondary-bg-color, var(--surface));
-  --fg:          var(--tg-theme-text-color, var(--fg));
-  --fg-muted:    var(--tg-theme-hint-color, var(--fg-muted));
-  --border:      color-mix(in srgb, var(--fg) 12%, transparent);
-  --border-strong: color-mix(in srgb, var(--fg) 20%, transparent);
-  --accent:      var(--tg-theme-button-color, var(--accent));
+/*
+ * Telegram provides its own palette. This block comes after the light mode
+ * one so the Telegram colours win inside the app, and the fallbacks go to the
+ * base values, never to the variable being defined.
+ */
+body[data-telegram="true"] {
+  --bg: var(--tg-theme-bg-color, var(--bg-base));
+  --bg-elevated: var(--tg-theme-section-bg-color, var(--bg-elevated-base));
+  --surface: var(--tg-theme-secondary-bg-color, var(--surface-base));
+  --surface-2: color-mix(in srgb, var(--surface) 82%, var(--fg) 6%);
+  --fg: var(--tg-theme-text-color, var(--fg-base));
+  --fg-muted: var(--tg-theme-hint-color, var(--fg-muted-base));
+  --accent: var(--tg-theme-button-color, var(--accent-base));
+  --accent-fg: var(--tg-theme-button-text-color, var(--accent-fg-base));
+  --border: color-mix(in srgb, var(--fg) 12%, transparent);
+  --border-strong: color-mix(in srgb, var(--fg) 22%, transparent);
 }
 
 /* Accent used for the fitness progress ring; independent of the Telegram accent
@@ -84,4 +126,8 @@ body[data-color-scheme="light"][data-telegram="true"] {
   --ring-mid:  #fbbf24;
   --ring-low:  #fb7185;
 }
-body[data-color-scheme="light"] { --ring: #12b76a; --ring-mid: #f59e0b; --ring-low: #e11d48; }
+body[data-color-scheme="light"] {
+  --ring: #12b76a;
+  --ring-mid: #f59e0b;
+  --ring-low: #e11d48;
+}

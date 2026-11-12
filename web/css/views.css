@@ -85,7 +85,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: calc(env(safe-area-inset-top) + 12px) 14px 0;
+  padding: calc(var(--app-top) + 12px) 14px 0;
 }
 
 .counter__hud-right {
@@ -161,7 +161,7 @@
 .counter__meta b { color: var(--warn); font-weight: 750; }
 
 .counter__bar {
-  padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+  padding: 14px 16px calc(18px + var(--app-bottom));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -214,13 +214,13 @@
 /* Placement guide shown before the camera starts */
 .guide {
   display: grid;
-  place-items: center;
-  gap: 16px;
+  justify-items: center;
+  align-content: start;
+  gap: 15px;
   text-align: center;
-  padding: 34px 22px;
-  min-height: 100dvh;
+  padding: 20px 2px 26px;
 }
-.guide__art { width: 190px; max-width: 62vw; }
+.guide__art { width: 200px; max-width: 62vw; }
 .guide__title { font-size: 21px; font-weight: 800; }
 .guide__text { font-size: 14.5px; color: var(--fg-muted); max-width: 34ch; line-height: 1.55; }
 .guide__steps { text-align: left; display: grid; gap: 10px; max-width: 330px; }

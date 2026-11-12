@@ -63,6 +63,88 @@ for (const view of ['counter', 'stats', 'friends', 'groups', 'profile']) {
   if (children === 0) problems.push(`la vista ${view} se ha quedado vacía`);
 }
 
+/* --------------------- ningún "null" suelto en pantalla --------------------- */
+
+console.log('→ buscando nodos de texto "null"');
+for (const view of ['counter', 'stats', 'friends', 'groups', 'profile']) {
+  await page.evaluate((v) => { location.hash = `#/${v}`; }, view);
+  await new Promise((r) => setTimeout(r, 1200));
+  const nulls = await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.getElementById('view'), NodeFilter.SHOW_TEXT,
+    );
+    let count = 0;
+    while (walker.nextNode()) {
+      if (walker.currentNode.textContent.trim() === 'null') count++;
+    }
+    return count;
+  });
+  if (nulls > 0) problems.push(`la vista ${view} pinta ${nulls} "null" en pantalla`);
+}
+console.log('   ninguna vista muestra "null"');
+
+/* ------------------- los modales devuelven su valor ------------------- */
+
+console.log('→ el peso se puede modificar');
+await page.evaluate(() => { location.hash = '#/profile'; });
+await new Promise((r) => setTimeout(r, 1400));
+
+const weightBefore = await page.evaluate(async () => {
+  const api = await import('/js/api.js');
+  return (await api.api.get('/api/me')).user.weightKg;
+});
+
+await page.evaluate(() => {
+  const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Cambiar peso');
+  btn?.click();
+});
+await new Promise((r) => setTimeout(r, 700));
+
+const modalState = await page.evaluate(() => {
+  const input = document.querySelector('.modal input');
+  return { open: !!input, value: input?.value ?? null };
+});
+if (!modalState.open) problems.push('el modal de peso no se abre');
+
+await page.evaluate(() => {
+  const input = document.querySelector('.modal input');
+  input.value = '88';
+  [...document.querySelectorAll('.modal button')]
+    .find((b) => b.textContent.includes('Guardar'))?.click();
+});
+await new Promise((r) => setTimeout(r, 1200));
+
+const weightAfter = await page.evaluate(async () => {
+  const api = await import('/js/api.js');
+  return (await api.api.get('/api/me')).user.weightKg;
+});
+console.log(`   peso: ${weightBefore} → ${weightAfter}`);
+if (weightAfter !== 88) {
+  problems.push(`el modal del peso no guardó el valor: sigue en ${weightAfter}`);
+}
+
+/* ------------------------- la guía no queda tapada ------------------------- */
+
+console.log('→ la guía cabe y no queda bajo la barra de pestañas');
+await page.evaluate(() => { location.hash = '#/counter'; });
+await new Promise((r) => setTimeout(r, 1300));
+const layout = await page.evaluate(() => {
+  const tabbar = document.querySelector('.tabbar');
+  const buttons = [...document.querySelectorAll('.guide button')];
+  const last = buttons[buttons.length - 1];
+  const tabTop = tabbar?.getBoundingClientRect().top ?? window.innerHeight;
+  return {
+    lastButtonBottom: last?.getBoundingClientRect().bottom ?? 0,
+    tabTop,
+    viewport: window.innerHeight,
+    scrollable: document.documentElement.scrollHeight > window.innerHeight,
+  };
+});
+console.log(`   botón inferior: ${Math.round(layout.lastButtonBottom)}px · barra: ${Math.round(layout.tabTop)}px`);
+if (layout.lastButtonBottom > layout.tabTop) {
+  problems.push('el último botón de la guía queda debajo de la barra de pestañas');
+}
+
 /* --------------------------- selector de cámara --------------------------- */
 
 await page.evaluate(() => { location.hash = '#/counter'; });

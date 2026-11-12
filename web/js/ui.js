@@ -33,6 +33,20 @@ function append(parent, children) {
   }
 }
 
+/**
+ * Replaces the children of a node, discarding the empty ones.
+ *
+ * `replaceChildren` turns a null into the literal text "null", which used to
+ * leave two stray "null" on the friends screen and one on the profile.
+ */
+export function fill(node, ...children) {
+  const list = children
+    .flat(4)
+    .filter((child) => child !== null && child !== undefined && child !== false);
+  node.replaceChildren(...list);
+  return node;
+}
+
 /** Parse an HTML string into a node. */
 export function el(html) {
   const tpl = document.createElement('template');
@@ -130,16 +144,25 @@ export function openModal(content, { onClose } = {}) {
 
 export function confirmModal({ title, message, confirmText = 'Confirmar', danger = false }) {
   return new Promise((resolve) => {
+    // A promise settles once: the value has to be decided before closing the
+    // modal, because closing it triggers onClose.
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
     const content = h('div');
     content.appendChild(h('h3.card__title', { style: { fontSize: '18px', marginBottom: '6px' } }, title));
     content.appendChild(h('p.card__sub', { style: { marginBottom: '18px' } }, message));
     const actions = h('div', { style: { display: 'flex', gap: '10px' } });
-    const { close } = openModal(content, { onClose: () => resolve(false) });
+    const { close } = openModal(content, { onClose: () => settle(false) });
     actions.append(
-      h('button.btn.btn--ghost.grow', { onclick: () => { close(); resolve(false); } }, 'Cancelar'),
+      h('button.btn.btn--ghost.grow', { onclick: () => { settle(false); close(); } }, 'Cancelar'),
       h('button.btn.grow', {
         class: danger ? 'btn--danger' : '',
-        onclick: () => { close(); resolve(true); },
+        onclick: () => { settle(true); close(); },
       }, confirmText),
     );
     content.appendChild(actions);
@@ -148,6 +171,15 @@ export function confirmModal({ title, message, confirmText = 'Confirmar', danger
 
 export function promptModal({ title, label, value = '', placeholder = '', hint = '', confirmText = 'Guardar' }) {
   return new Promise((resolve) => {
+    // Same rule as confirmModal: the value is settled before the modal closes,
+    // otherwise onClose resolves the promise with null and the value is lost.
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
     const input = h('input.input', { type: 'text', value, placeholder, autocomplete: 'off' });
     const error = h('div.field__error', { hidden: true });
     const content = h('div');
@@ -160,10 +192,10 @@ export function promptModal({ title, label, value = '', placeholder = '', hint =
         hint ? h('div.field__hint', hint) : null,
       ),
     );
-    const { close } = openModal(content, { onClose: () => resolve(null) });
+    const { close } = openModal(content, { onClose: () => settle(null) });
     const actions = h('div', { style: { display: 'flex', gap: '10px' } });
     actions.append(
-      h('button.btn.btn--ghost.grow', { onclick: () => { close(); resolve(null); } }, 'Cancelar'),
+      h('button.btn.btn--ghost.grow', { onclick: () => { settle(null); close(); } }, 'Cancelar'),
       h('button.btn.grow', {
         onclick: () => {
           const v = input.value.trim();
@@ -173,8 +205,8 @@ export function promptModal({ title, label, value = '', placeholder = '', hint =
             input.focus();
             return;
           }
+          settle(v);
           close();
-          resolve(v);
         },
       }, confirmText),
     );

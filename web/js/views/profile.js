@@ -2,7 +2,7 @@
 
 import { api } from '../api.js';
 import { getState, setSettings, setState } from '../store.js';
-import { h, fmtNumber, avatar, loading, toast, promptModal, confirmModal, openModal } from '../ui.js';
+import { avatar, confirmModal, fill, fmtNumber, h, loading, openModal, promptModal, toast } from '../ui.js';
 import { hapticSelect } from '../tg.js';
 import { DEFAULT_THRESHOLDS } from '../pose/metrics.js';
 import { FACING } from '../pose/camera.js';
@@ -18,7 +18,7 @@ export function profileView() {
       setState({ user: me.user });
       render(me.user, me.weightStale);
     } catch (err) {
-      content.replaceChildren(h('div.empty', h('div.empty__icon', '⚠️'), h('div.empty__hint', err.message)));
+      fill(content, h('div.empty', h('div.empty__icon', '⚠️'), h('div.empty__hint', err.message)));
     }
   }
 
@@ -26,7 +26,7 @@ export function profileView() {
     const state = getState();
     const thresholds = { ...DEFAULT_THRESHOLDS, ...(state.settings.thresholds ?? {}) };
 
-    content.replaceChildren(
+    fill(content, 
       h('div.view__section',
         h('div.card',
           h('div.flex',

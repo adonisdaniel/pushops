@@ -257,6 +257,23 @@ La app es cliente y no se fía de nada de lo que reportan. El servidor:
 
 ---
 
+## El tema y las áreas seguras
+
+Dos detalles que solo se ven dentro de Telegram:
+
+- **`env(safe-area-inset-*)` vale 0 dentro del WebView**, así que el topbar se
+  colocaba debajo de la barra de reloj del móvil. Telegram expone sus propias
+  medidas (`safeAreaInset` y `contentSafeAreaInset`, esta última la que ocupa la
+  cabecera flotante de Telegram). `tg.js` las publica como variables CSS
+  (`--tg-content-top`, `--tg-safe-bottom`…) y el CSS las combina con `env()` en
+  `--app-top` y `--app-bottom`.
+- **Los overrides de Telegram no pueden caer en su propio valor.** Un
+  `--accent: var(--tg-theme-button-color, var(--accent))` es una referencia
+  cíclica: la propiedad queda inválida y la variable se queda vacía. Dentro de
+  Telegram no se notaba (la variable de Telegram siempre existe) pero fuera la
+  app se quedaba sin colores. Cada token tiene ahora un valor `--*-base` al que
+  caer de forma segura.
+
 ## Desarrollo
 
 ```bash

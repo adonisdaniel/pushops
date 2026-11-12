@@ -2,7 +2,7 @@
 
 import { api } from '../api.js';
 import { getState, setState } from '../store.js';
-import { h, fmtNumber, fmtDecimal, fmtDuration, fmtRelative, barChart, loading, emptyState } from '../ui.js';
+import { barChart, emptyState, fill, fmtDecimal, fmtDuration, fmtNumber, fmtRelative, h, loading } from '../ui.js';
 
 const RANGES = [
   { key: '7', label: '7 días', days: 7 },
@@ -32,7 +32,7 @@ export function statsView() {
       setState({ summary: summary.summary, series: series.buckets });
       render(summary, series, workouts);
     } catch (err) {
-      content.replaceChildren(emptyState('⚠️', 'No se pudieron cargar tus estadísticas', err.message));
+      fill(content, emptyState('⚠️', 'No se pudieron cargar tus estadísticas', err.message));
     }
   }
 
@@ -53,7 +53,7 @@ export function statsView() {
       value: b.reps,
     }));
 
-    content.replaceChildren(
+    fill(content, 
       h('div.view__section', rangeBar),
 
       h('div.stat-hero',

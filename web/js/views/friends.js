@@ -1,7 +1,7 @@
 // Friends: requests, list and the head-to-head comparison.
 
 import { api } from '../api.js';
-import { h, fmtNumber, fmtDecimal, avatar, loading, emptyState, toast, promptModal, confirmModal } from '../ui.js';
+import { avatar, confirmModal, emptyState, fill, fmtDecimal, fmtNumber, h, loading, promptModal, toast } from '../ui.js';
 
 const METRICS = [
   { key: 'points', label: 'Puntos' },
@@ -21,14 +21,14 @@ export function friendsView() {
       const data = await api.get('/api/friends');
       render(data);
     } catch (err) {
-      content.replaceChildren(emptyState('⚠️', 'No se pudieron cargar tus amigos', err.message));
+      fill(content, emptyState('⚠️', 'No se pudieron cargar tus amigos', err.message));
     }
   }
 
   function render({ friends = [], incoming = [] } = {}) {
     const friendList = friends ?? [];
     const incomingList = incoming ?? [];
-    content.replaceChildren(
+    fill(content, 
       h('div.view__section',
         h('button.btn.btn--block', { onclick: addFriend }, 'Añadir amigo'),
       ),
@@ -123,16 +123,16 @@ export function friendsView() {
 
     async function loadCompare(metric = 'points') {
       const body = wrap.querySelector('.card');
-      body.replaceChildren(loading('Comparando…'));
+      fill(body, loading('Comparando…'));
       try {
         const data = await api.get(`/api/friends/compare?ids=${ids}&metric=${metric}`);
         const entries = data.entries ?? [];
         if (!entries.length) {
-          body.replaceChildren(emptyState('📊', 'Nada que comparar', 'Haced una serie cada uno.'));
+          fill(body, emptyState('📊', 'Nada que comparar', 'Haced una serie cada uno.'));
           return;
         }
         const max = Math.max(...entries.map((e) => e.value), 1);
-        body.replaceChildren(
+        fill(body, 
           h('div', { style: { marginBottom: '14px' } }, metricBar),
           h('div.list', entries.map((e) => h('div.row',
             h('span.rank', { class: e.rank <= 3 ? `rank--${e.rank}` : '' }, String(e.rank)),
@@ -146,7 +146,7 @@ export function friendsView() {
           ))),
         );
       } catch (err) {
-        body.replaceChildren(emptyState('⚠️', 'No se pudo comparar', err.message));
+        fill(body, emptyState('⚠️', 'No se pudo comparar', err.message));
       }
     }
     void loadCompare();
