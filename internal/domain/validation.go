@@ -13,6 +13,9 @@ const (
 	MinRepConfidence = 0.35
 	// MaxWorkoutDurationMs bounds a single session (3 hours is already absurd).
 	MaxWorkoutDurationMs = 3 * 60 * 60 * 1000
+	// MinValidReps is the smallest set that is worth storing. Shorter sets are
+	// discarded instead of scored: they are usually a false start.
+	MinValidReps = 2
 )
 
 // RepInput is one repetition as reported by the client.

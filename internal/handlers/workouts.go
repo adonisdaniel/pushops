@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"strings"
@@ -92,9 +93,13 @@ func (h *Handler) createWorkout(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusUnprocessableEntity, "la sesión no supera las comprobaciones: "+result.Reason)
 		return
 	}
-	if len(result.Reps) == 0 {
-		h.logger.Warn("workout rejected", "reason", "no repetitions", "user", httpx.UserID(r.Context()))
-		httpx.Error(w, http.StatusBadRequest, "la sesión no contiene repeticiones")
+	if result.ValidCount < domain.MinValidReps {
+		h.logger.Warn("workout rejected",
+			"reason", "not enough valid repetitions",
+			"user", httpx.UserID(r.Context()),
+			"valid", result.ValidCount)
+		httpx.Error(w, http.StatusUnprocessableEntity,
+			fmt.Sprintf("una serie necesita al menos %d flexiones válidas", domain.MinValidReps))
 		return
 	}
 

@@ -36,6 +36,9 @@ const MODE_INFO = {
 /** How many times the calibration is retried while the user gets in position. */
 const MAX_CALIBRATION_ATTEMPTS = 20;
 
+/** A set below this many valid push-ups is not worth sending to the server. */
+const MIN_VALID_REPS = 2;
+
 /** Rounds to three decimals, so the payload stays tidy and comparable. */
 function round3(v) {
   return Math.round((v ?? 0) * 1000) / 1000;
@@ -369,6 +372,13 @@ export function counterView() {
     startedAt = Date.now();
     reps = [];
     frameTimes = [];
+    // A retry keeps the same view alive: the diagnostics start from scratch so
+    // they describe this set and not the union of every attempt.
+    totalFrames = 0;
+    poseFrames = 0;
+    confSum = 0;
+    maxFill = 0;
+    minElbow = 0;
     counter = new RepCounter({
       thresholds: { ...DEFAULT_THRESHOLDS, ...(getState().settings.thresholds ?? {}) },
       onRep: (event) => {
@@ -462,6 +472,12 @@ export function counterView() {
 
     if (counts.valid === 0 && counts.invalid === 0) {
       renderGuide();
+      return;
+    }
+    // Below the minimum the set is not sent at all. The server rejects it too,
+    // so queueing it offline would only feed a request that can never succeed.
+    if (counts.valid < MIN_VALID_REPS) {
+      showNotSaved(elapsed, counts);
       return;
     }
     audio.play('complete');
@@ -560,6 +576,44 @@ export function counterView() {
     }
   }
 
+  /**
+   * A set that did not reach the minimum is shown and thrown away, never
+   * uploaded. The calibration survives, so retrying does not repeat it.
+   */
+  function showNotSaved(elapsed, counts) {
+    hapticNotify('error');
+    const content = h('div');
+    content.append(
+      h('div.result__big',
+        h('div.result__bigNum', String(counts.valid)),
+        h('div.card__sub', counts.valid === 1 ? 'flexión válida' : 'flexiones válidas'),
+      ),
+      h('p.card__sub', { style: { textAlign: 'center' } },
+        `Necesitas al menos ${MIN_VALID_REPS} flexiones válidas para guardar la serie.`),
+      h('p.small.muted.center',
+        `${fmtDuration(elapsed)} · ${counts.invalid} incompletas`),
+    );
+
+    const { close } = openModal(content, { onClose: () => renderGuide() });
+
+    content.append(
+      h('div', { style: { display: 'flex', gap: '10px' } },
+        h('button.btn.btn--ghost.grow', {
+          onclick: () => {
+            close();
+            location.hash = '#/stats';
+          },
+        }, 'Ver estadísticas'),
+        h('button.btn.grow', {
+          onclick: () => {
+            close();
+            void startFlow();
+          },
+        }, 'Reintentar'),
+      ),
+    );
+  }
+
   function showResult(elapsed, counts, outcome) {
     const content = h('div');
     content.append(
@@ -579,11 +633,6 @@ export function counterView() {
         ? 'Guardada en el servidor'
         : (outcome.message ?? 'No se ha podido guardar la serie')));
     }
-    if (counts.valid === 0) {
-      content.appendChild(h('p.card__sub', { style: { textAlign: 'center' } },
-        'No he detectado ninguna flexión válida. Revisa la colocación del móvil o baja la exigencia en Perfil → Sensibilidad.'));
-    }
-
     const { close } = openModal(content, { onClose: () => { location.hash = '#/stats'; } });
 
     const summary = h('div.result__grid');

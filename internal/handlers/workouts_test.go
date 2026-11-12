@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/adonis/pushops/internal/auth"
 	"github.com/adonis/pushops/internal/domain"
+	"github.com/adonis/pushops/internal/httpx"
 )
 
 // The client used to send performance.now() values with decimals and the
@@ -143,14 +147,55 @@ func TestRoundTripOfTheScore(t *testing.T) {
 		EndedAt:   60_001,
 		Reps: []domain.RepInput{
 			{TMs: 0, DurationMs: 2000, FillMax: 0.9, OK: true, Conf: 0.9},
+			{TMs: 3000, DurationMs: 2000, FillMax: 0.9, OK: true, Conf: 0.9},
 		},
 	}
 	res := domain.ValidateWorkout(in)
-	if res.ValidCount != 1 {
-		t.Fatalf("valid reps = %d, want 1", res.ValidCount)
+	if res.ValidCount != 2 {
+		t.Fatalf("valid reps = %d, want 2", res.ValidCount)
 	}
-	if got := domain.ScorePoints(res.ValidCount, "standard", 75, 0); got != 1 {
-		t.Errorf("score = %v, want 1", got)
+	if got := domain.ScorePoints(res.ValidCount, "standard", 75, 0); got != 2 {
+		t.Errorf("score = %v, want 2", got)
 	}
 	_ = math.Round
+}
+
+// A set with fewer valid repetitions than the minimum is not worth storing:
+// the server rejects it instead of scoring a false start.
+func TestCreateWorkoutRejectsSetsBelowTheMinimum(t *testing.T) {
+	const body = `{
+		"clientId": "w_min_1",
+		"variant": "standard",
+		"mode": "suelo",
+		"startedAt": 1794510000000,
+		"endedAt": 1794510030000,
+		"localDate": "2026-11-12",
+		"reps": [
+			{"tMs": 1000, "durationMs": 2000, "fillMax": 0.9, "elbowMin": 60, "ok": true, "conf": 0.9},
+			{"tMs": 4000, "durationMs": 2000, "fillMax": 0.9, "elbowMin": 60, "ok": false, "conf": 0.9}
+		]
+	}`
+
+	h, st := newTestHandler(t)
+	user, _, err := st.EnsureUser(context.Background(),
+		&auth.TelegramUser{ID: 42, FirstName: "Ada"}, nil)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/workouts", strings.NewReader(body)).
+		WithContext(httpx.WithUser(context.Background(), user.ID))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.createWorkout(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if count, err := st.CountWorkouts(context.Background(), user.ID); err != nil {
+		t.Fatalf("count workouts: %v", err)
+	} else if count != 0 {
+		t.Errorf("stored workouts = %d, want 0", count)
+	}
 }

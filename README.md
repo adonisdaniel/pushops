@@ -248,6 +248,8 @@ La app es cliente y no se fía de nada de lo que reportan. El servidor:
 
 - rechaza repeticiones de duración imposible (< 900 ms o > 15 s),
 - rechaza series demasiado cortas para las repeticiones que declaran,
+- descarta las series con menos de 2 flexiones válidas (el cliente ni siquiera
+  las envía),
 - rechaza series con confianza de detección baja,
 - limita a 500 repeticiones por sesión,
 - ignora la puntuación que envíe el cliente y la recalcula,
