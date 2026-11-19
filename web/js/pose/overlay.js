@@ -1,5 +1,12 @@
 // Canvas overlay. Everything the user sees is drawn here: the camera frame, the
-// skeleton and the progress ring that fills as the body approaches the camera.
+// skeleton and the depth feedback in the chest.
+//
+// Two visuals are supported:
+//   - "perfil" (angle mode): the progress arc fills around the body as the
+//     movement approaches the bottom.
+//   - "suelo" (depth mode): a target circle stays fixed over the chest and a
+//     disc grows from the centre. When the disc covers the target the
+//     repetition can be counted, so the user gets a clear "how low" reference.
 //
 // Drawing the video into the canvas (instead of leaving it as a <video> behind
 // the overlay) keeps a single source of truth for the geometry and the mirror.
@@ -11,6 +18,23 @@ import { CONNECTIONS, isVisible } from './landmarks.js';
 
 const RING_RADIUS = 52;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/** Radius of the fixed target circle in the "suelo" mode, in CSS pixels. */
+export const TARGET_RADIUS = 52;
+/** Slight overshoot when full, so the disc visibly covers the target line. */
+export const PUCK_MAX_RADIUS = TARGET_RADIUS + 5;
+/** Radius of the chest disc at the extended position. */
+export const PUCK_MIN_RADIUS = 8;
+
+/**
+ * Radius of the growing disc. 0 progress is the extended position (small dot),
+ * 1 progress means it completely covers the target circle, which is the depth
+ * the repetition must reach.
+ */
+export function puckRadius(progress) {
+  const p = Math.max(0, Math.min(1, progress));
+  return PUCK_MIN_RADIUS + (PUCK_MAX_RADIUS - PUCK_MIN_RADIUS) * p;
+}
 
 /**
  * Geometry of the camera frame inside the canvas, honouring object-fit: cover.
@@ -40,6 +64,9 @@ export class Overlay {
     this.ringHost = ringHost;
     this.video = videoEl ?? null;
     this.ring = null;
+    this.ringTrack = null;
+    this.ringTarget = null;
+    this.ringPuck = null;
     this.ringProgress = null;
     this.showSkeleton = true;
     this.mirror = false;
@@ -67,9 +94,9 @@ export class Overlay {
    *
    * @param {object} frame   engine result, may be null
    * @param {object} signal  computed signals, may be null
-   * @param {object} opts    { mirror: boolean }
+   * @param {object} opts    { mirror: boolean, mode: 'suelo' | 'perfil' }
    */
-  draw(frame, signal, { mirror = false } = {}) {
+  draw(frame, signal, { mirror = false, mode = 'auto' } = {}) {
     this.resize();
     this.clear();
     this.mirror = mirror;
@@ -84,7 +111,10 @@ export class Overlay {
     const map = this.mapper(frame, mirror);
     if (this.showSkeleton) this.drawSkeleton(frame.landmarks, map);
     if (signal?.anchor) {
-      this.showRing(signal.anchor, map, signal.fill ?? 0);
+      this.showRing(signal.anchor, map, signal.fill ?? 0, {
+        mode,
+        progress: signal.progress,
+      });
     } else {
       this.hideRing();
     }
@@ -150,7 +180,7 @@ export class Overlay {
     }
   }
 
-  showRing(anchor, map, fill) {
+  showRing(anchor, map, fill, { mode = 'auto', progress = null } = {}) {
     if (!this.ring) {
       const ns = 'http://www.w3.org/2000/svg';
       const svg = document.createElementNS(ns, 'svg');
@@ -159,35 +189,74 @@ export class Overlay {
       svg.setAttribute('width', String(RING_RADIUS * 2 + 16));
       svg.setAttribute('height', String(RING_RADIUS * 2 + 16));
 
+      const center = String(RING_RADIUS + 8);
+
       const core = document.createElementNS(ns, 'circle');
       core.setAttribute('class', 'ring__core');
-      core.setAttribute('cx', String(RING_RADIUS + 8));
-      core.setAttribute('cy', String(RING_RADIUS + 8));
+      core.setAttribute('cx', center);
+      core.setAttribute('cy', center);
       core.setAttribute('r', String(RING_RADIUS - 6));
 
       const track = document.createElementNS(ns, 'circle');
       track.setAttribute('class', 'ring__track');
-      track.setAttribute('cx', String(RING_RADIUS + 8));
-      track.setAttribute('cy', String(RING_RADIUS + 8));
+      track.setAttribute('cx', center);
+      track.setAttribute('cy', center);
       track.setAttribute('r', String(RING_RADIUS));
 
-      const progress = document.createElementNS(ns, 'circle');
-      progress.setAttribute('class', 'ring__progress');
-      progress.setAttribute('cx', String(RING_RADIUS + 8));
-      progress.setAttribute('cy', String(RING_RADIUS + 8));
-      progress.setAttribute('r', String(RING_RADIUS));
-      progress.setAttribute('stroke-dasharray', `0 ${RING_CIRCUMFERENCE}`);
+      const target = document.createElementNS(ns, 'circle');
+      target.setAttribute('class', 'ring__target');
+      target.setAttribute('cx', center);
+      target.setAttribute('cy', center);
+      target.setAttribute('r', String(TARGET_RADIUS));
 
-      svg.append(core, track, progress);
+      const progressArc = document.createElementNS(ns, 'circle');
+      progressArc.setAttribute('class', 'ring__progress');
+      progressArc.setAttribute('cx', center);
+      progressArc.setAttribute('cy', center);
+      progressArc.setAttribute('r', String(RING_RADIUS));
+      progressArc.setAttribute('stroke-dasharray', `0 ${RING_CIRCUMFERENCE}`);
+
+      const puck = document.createElementNS(ns, 'circle');
+      puck.setAttribute('class', 'ring__puck');
+      puck.setAttribute('cx', center);
+      puck.setAttribute('cy', center);
+      puck.setAttribute('r', String(PUCK_MIN_RADIUS));
+
+      svg.append(core, track, target, progressArc, puck);
       this.ringHost.appendChild(svg);
       this.ring = svg;
-      this.ringProgress = progress;
+      this.ringTrack = track;
+      this.ringTarget = target;
+      this.ringPuck = puck;
+      this.ringProgress = progressArc;
     }
 
     const p = map(anchor);
     this.ring.style.left = `${p.x / this.dpr}px`;
     this.ring.style.top = `${p.y / this.dpr}px`;
     this.ring.style.opacity = '1';
+
+    if (mode === 'suelo') {
+      // Fill the target: the disc grows until it covers the fixed circle.
+      const ratio = Math.max(0, Math.min(1, progress ?? fill));
+      const filled = ratio >= 1;
+
+      this.ringTrack.style.display = 'none';
+      this.ringProgress.setAttribute('stroke-dasharray', `0 ${RING_CIRCUMFERENCE}`);
+      this.ringTarget.style.display = '';
+      this.ringPuck.style.display = '';
+      this.ringPuck.setAttribute('r', String(puckRadius(ratio)));
+      this.ringTarget.classList.toggle('ring__target--filled', filled);
+      this.ringPuck.classList.toggle('ring__puck--filled', filled);
+      return;
+    }
+
+    // Lateral mode: the original arc over the body.
+    this.ringTrack.style.display = '';
+    this.ringTarget.style.display = 'none';
+    this.ringPuck.style.display = 'none';
+    this.ringTarget.classList.remove('ring__target--filled');
+    this.ringPuck.classList.remove('ring__puck--filled');
 
     const clamped = Math.max(0, Math.min(1, fill));
     this.ringProgress.setAttribute('stroke-dasharray', `${clamped * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`);
@@ -201,6 +270,9 @@ export class Overlay {
   destroy() {
     this.ring?.remove();
     this.ring = null;
+    this.ringTrack = null;
+    this.ringTarget = null;
+    this.ringPuck = null;
     this.ringProgress = null;
   }
 }

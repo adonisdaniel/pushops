@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 import { angleAt, bodyAnchor, dist, elbowAngle, meanElbowAngle } from '../web/js/pose/landmarks.js';
 import { computeSignals, createFilters, DEFAULT_THRESHOLDS, maskCoverage } from '../web/js/pose/metrics.js';
+import { PUCK_MAX_RADIUS, PUCK_MIN_RADIUS, puckRadius } from '../web/js/pose/overlay.js';
 import { RepCounter } from '../web/js/pose/repCounter.js';
 
 const LM = {
@@ -131,13 +132,14 @@ test('computeSignals turns a bigger body into a higher fill', () => {
 
 /* --------------------------- rep counter ---------------------------- */
 
-function signal({ fill = 0, elbow = null, t = 0, conf = 0.9 }) {
+function signal({ fill = 0, elbow = null, t = 0, conf = 0.9, coverage = 0.2 }) {
   return {
     fill,
+    progress: Math.max(0, Math.min(1, fill / DEFAULT_THRESHOLDS.fillTarget)),
     elbow,
     elbowRaw: elbow,
     angleAvailable: elbow !== null,
-    coverage: 0.2,
+    coverage,
     confidence: conf,
     visible: true,
     timestamp: t,
@@ -247,4 +249,59 @@ test('the counters survive a reset', () => {
   counter.reset();
   assert.equal(counter.counts.valid, 0);
   assert.equal(counter.counts.invalid, 0);
+});
+
+test('suelo mode counts with depth even when the elbow never bends', () => {
+  // Under the chest the elbow angle is foreshortened and useless: it stays
+  // "extended" all the time. The depth signal is the one that must drive it.
+  const reps = [];
+  const counter = new RepCounter({ mode: 'suelo', onRep: (e) => reps.push(e) });
+
+  counter.push(signal({ fill: 0.02, elbow: 170, t: 0 }));
+  counter.push(signal({ fill: 0.35, elbow: 170, t: 500 }));
+  counter.push(signal({ fill: 0.9, elbow: 170, t: 1200 }));
+  counter.push(signal({ fill: 0.5, elbow: 170, t: 1800 }));
+  counter.push(signal({ fill: 0.03, elbow: 170, t: 2400 }));
+
+  assert.equal(reps.length, 1, 'expected exactly one repetition');
+  assert.equal(reps[0].ok, true, `repetition rejected: ${reps[0].reasons}`);
+  assert.equal(counter.counts.valid, 1);
+});
+
+test('suelo mode rejects a repetition that does not fill the target', () => {
+  const reps = [];
+  const counter = new RepCounter({ mode: 'suelo', onRep: (e) => reps.push(e) });
+
+  counter.push(signal({ fill: 0.02, elbow: 170, t: 0 }));
+  counter.push(signal({ fill: 0.3, elbow: 170, t: 600 }));
+  counter.push(signal({ fill: 0.5, elbow: 170, t: 1200 }));
+  counter.push(signal({ fill: 0.03, elbow: 170, t: 2000 }));
+
+  assert.equal(reps.length, 1);
+  assert.equal(reps[0].ok, false);
+  assert.ok(reps[0].reasons.includes('no bajó lo suficiente'));
+});
+
+test('perfil mode still uses the elbow angle with a flat depth signal', () => {
+  const reps = [];
+  const counter = new RepCounter({ mode: 'perfil', onRep: (e) => reps.push(e) });
+
+  // No segmentation mask in the lateral mode, so coverage is null.
+  counter.push(signal({ fill: 0.2, elbow: 168, t: 0, coverage: null }));
+  counter.push(signal({ fill: 0.2, elbow: 120, t: 500, coverage: null }));
+  counter.push(signal({ fill: 0.2, elbow: 60, t: 1100, coverage: null }));
+  counter.push(signal({ fill: 0.2, elbow: 90, t: 1700, coverage: null }));
+  counter.push(signal({ fill: 0.2, elbow: 168, t: 2300, coverage: null }));
+
+  assert.equal(reps.length, 1);
+  assert.equal(reps[0].ok, true, `repetition rejected: ${reps[0].reasons}`);
+});
+
+test('the chest disc grows from a dot to cover the target', () => {
+  assert.equal(puckRadius(0), PUCK_MIN_RADIUS);
+  assert.equal(puckRadius(1), PUCK_MAX_RADIUS);
+  assert.ok(puckRadius(0.5) > PUCK_MIN_RADIUS && puckRadius(0.5) < PUCK_MAX_RADIUS);
+  // Out-of-range values must not blow the disc up.
+  assert.equal(puckRadius(-1), PUCK_MIN_RADIUS);
+  assert.equal(puckRadius(2), PUCK_MAX_RADIUS);
 });

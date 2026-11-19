@@ -78,6 +78,29 @@
   fill: rgba(0,0,0,.28);
 }
 
+/* "Suelo" mode: fixed target over the chest plus a disc that grows as the body
+   gets closer. The disc has to cover the target for the repetition to count. */
+.ring__target {
+  fill: none;
+  stroke: rgba(255,255,255,.6);
+  stroke-width: 3;
+  stroke-dasharray: 7 6;
+  transition: stroke .18s linear;
+}
+.ring__target--filled {
+  stroke: var(--ring);
+  stroke-dasharray: none;
+}
+.ring__puck {
+  fill: rgba(61,220,132,.28);
+  stroke: var(--ring);
+  stroke-width: 2.5;
+  transition: fill .18s linear;
+}
+.ring__puck--filled {
+  fill: rgba(61,220,132,.55);
+}
+
 .counter__hud {
   position: absolute;
   top: 0; left: 0; right: 0;

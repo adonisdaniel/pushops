@@ -6,7 +6,7 @@ import { SCALE_PAIRS, bodyAnchor, dist, elbowAngle, isVisible, meanElbowAngle } 
 /** Tunable detector thresholds. Stored per user so they can be adjusted live. */
 export const DEFAULT_THRESHOLDS = {
   // Depth / fill
-  targetRatio: 2.2,     // how much bigger the body must look to count as "bottom"
+  targetRatio: 1.7,     // how much bigger the body must look to count as "bottom"
   fillStart: 0.12,      // fill above this starts a descent
   fillTarget: 0.72,     // fill above this means the body reached the bottom
   fillRelease: 0.42,    // fill below this means the body is extended again
@@ -36,10 +36,12 @@ export class Ema {
 }
 
 /**
- * Fraction of the frame covered by the body, read from the segmentation mask.
- * The mask is scanned with a stride to keep the cost low.
+ * Fraction of the frame covered by the body plus the centroid of the mask.
+ * The mask is scanned with a stride to keep the cost low. The centroid is a
+ * fallback anchor: in the "suelo" mode the shoulders leave the frame at the
+ * bottom of the movement, just when the ring is needed the most.
  */
-export function maskCoverage(mask) {
+export function maskStats(mask) {
   if (!mask) return null;
   let data = null;
   try {
@@ -52,19 +54,35 @@ export function maskCoverage(mask) {
   }
   if (!data || !data.length) return null;
 
-  const total = mask.width * mask.height;
   const stride = 2;
   let hits = 0;
   let samples = 0;
+  let sumX = 0;
+  let sumY = 0;
   for (let y = 0; y < mask.height; y += stride) {
     for (let x = 0; x < mask.width; x += stride) {
       const v = data[y * mask.width + x];
       samples++;
-      if (v > 0.5) hits++;
+      if (v > 0.5) {
+        hits++;
+        sumX += x;
+        sumY += y;
+      }
     }
   }
   if (!samples) return null;
-  return hits / samples;
+
+  return {
+    coverage: hits / samples,
+    centroid: hits
+      ? { x: (sumX / hits) / mask.width, y: (sumY / hits) / mask.height }
+      : null,
+  };
+}
+
+/** Fraction of the frame covered by the body, read from the segmentation mask. */
+export function maskCoverage(mask) {
+  return maskStats(mask)?.coverage ?? null;
 }
 
 /**
@@ -91,13 +109,15 @@ export function scaleNorm(lms, calib) {
  *
  * @param {object} frame   result of PoseEngine.detect()
  * @param {object} calib   calibration payload
- * @param {object} opts    thresholds plus the ema filters
+ * @param {object} opts    thresholds, placement mode and the ema filters
  */
 export function computeSignals(frame, calib, opts) {
   const th = opts.thresholds ?? DEFAULT_THRESHOLDS;
   const lms = frame.landmarks;
+  const depthMode = opts.mode === 'suelo';
 
-  const coverage = maskCoverage(frame.mask);
+  const stats = maskStats(frame.mask);
+  const coverage = stats?.coverage ?? null;
   const smoothCoverage = opts.coverageEma.push(coverage);
 
   const scale = scaleNorm(lms, calib);
@@ -111,19 +131,24 @@ export function computeSignals(frame, calib, opts) {
   const coverageRatio = smoothCoverage !== null && calib?.coverageRef > 0
     ? smoothCoverage / calib.coverageRef
     : null;
-  const rawRatio = Math.max(
-    coverageRatio ?? 0,
-    smoothScale ?? 0,
-    1,
-  );
+  // In "suelo" the body ends up so close that the shoulders leave the frame and
+  // the landmark scale collapses right at the bottom. The segmentation mask
+  // keeps growing, so it is the primary signal there and the scale is only the
+  // fallback. In the lateral mode the old "biggest ratio wins" still applies.
+  const rawRatio = depthMode
+    ? coverageRatio ?? smoothScale ?? 1
+    : Math.max(coverageRatio ?? 0, smoothScale ?? 0, 1);
   const fill = clamp01((rawRatio - 1) / (th.targetRatio - 1));
+  // 0 at the extended position, 1 when the ring is completely full.
+  const progress = clamp01(fill / (th.fillTarget || 1));
 
-  const anchor = bodyAnchor(lms);
+  const anchor = bodyAnchor(lms) ?? (depthMode ? stats?.centroid ?? null : null);
   const conf = frame.confidence ?? 0;
   const visible = (smoothCoverage ?? 0) >= th.minCoverage || (smoothScale ?? 0) > 1.02;
 
   return {
     fill,
+    progress,
     rawRatio,
     coverage: smoothCoverage,
     scale: smoothScale,

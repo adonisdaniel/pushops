@@ -15,11 +15,12 @@ import { RepCounter } from '../pose/repCounter.js';
 const MODE_INFO = {
   suelo: {
     title: 'Teléfono bajo el cuerpo',
-    text: 'Coloca el teléfono en el suelo, justo debajo del pecho. El círculo se llenará a medida que te acerques.',
+    text: 'Coloca el teléfono en el suelo, justo debajo del pecho. Al bajar, el disco crece: llénalo hasta cubrir el aro para que cuente.',
     steps: [
       ['Tumba el teléfono en el suelo', 'bajo el pecho, con la pantalla hacia arriba'],
       ['Colócate en posición de flexión', 'la cara y el pecho quedan sobre el teléfono'],
       ['Mantén los brazos estirados', 'para que el contador capture la referencia'],
+      ['Baja hasta llenar el círculo', 'el disco debe cubrir el aro para contar la flexión'],
     ],
   },
   perfil: {
@@ -380,6 +381,7 @@ export function counterView() {
     maxFill = 0;
     minElbow = 0;
     counter = new RepCounter({
+      mode,
       thresholds: { ...DEFAULT_THRESHOLDS, ...(getState().settings.thresholds ?? {}) },
       onRep: (event) => {
         reps.push(event);
@@ -412,6 +414,7 @@ export function counterView() {
       if (frame) {
         frame.video = video;
         signal = computeSignals(frame, calib, {
+          mode,
           thresholds: { ...DEFAULT_THRESHOLDS, ...(getState().settings.thresholds ?? {}) },
           ...filters,
         });
@@ -436,7 +439,7 @@ export function counterView() {
 
       // The preview is painted even without a pose, so the user can frame
       // themselves while the detector looks for them.
-      overlay?.draw(frame, signal, { mirror: camera?.isFrontFacing() });
+      overlay?.draw(frame, signal, { mirror: camera?.isFrontFacing(), mode });
     }
     updateFps();
   }
